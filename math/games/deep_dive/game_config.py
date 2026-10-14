@@ -1,7 +1,7 @@
 """Adapted from the official games/fifty_fifty/game_config.py."""
 import json
 import os
-import random
+from distribution import build_catalogue
 from pathlib import Path
 
 from src.config.config import Config, BetMode
@@ -19,11 +19,9 @@ class GameConfig(Config):
         self.working_name = self.game_id
         self.rtp = settings["prototypeRtp"]
         self.wincap = settings["maxWin"]
-        self.payout_catalogue = [entry["multiplier"] for entry in settings["outcomes"] for _ in range(entry["books"])]
-        random.Random(42).shuffle(self.payout_catalogue)
-        assert len(self.payout_catalogue) == 100
-        assert max(self.payout_catalogue) / 100 == self.wincap
-        assert sum(self.payout_catalogue) / len(self.payout_catalogue) / 100 == self.rtp
+        catalogue = build_catalogue(settings)
+        self.payout_catalogue = [payout for payout, _ in catalogue]
+        self.selection_weights = [weight for _, weight in catalogue]
         self.win_type = "other"
         self.construct_paths()
         self.num_reels = 0

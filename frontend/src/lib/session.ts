@@ -8,6 +8,24 @@ export interface GameSession {
   endRound(): Promise<{ balance: Balance }>;
 }
 
+// Integer rejection sampling avoids modulo bias. Production selection belongs to RGS.
+export function pickWeightedBook(books: Book[], draw = () => crypto.getRandomValues(new Uint32Array(1))[0]): Book {
+  const total = books.reduce((sum, book) => {
+    if (!Number.isSafeInteger(book.selectionWeight) || book.selectionWeight <= 0) throw new Error('Invalid demo weight');
+    return sum + book.selectionWeight;
+  }, 0);
+  if (!Number.isSafeInteger(total) || total <= 0 || total > 2 ** 32) throw new Error('Invalid demo weight total');
+  const limit = Math.floor(2 ** 32 / total) * total;
+  let sample: number;
+  do { sample = draw(); } while (sample >= limit);
+  let ticket = sample % total;
+  for (const book of books) {
+    if (ticket < book.selectionWeight) return book;
+    ticket -= book.selectionWeight;
+  }
+  throw new Error('Demo selection failed');
+}
+
 export async function createSession(url: string): Promise<GameSession> {
   const params = new URL(url).searchParams;
   if (params.has('sessionID') || params.has('rgs_url')) {
@@ -40,9 +58,7 @@ export async function createSession(url: string): Promise<GameSession> {
     },
     async play(bet) {
       if (pending || amount < bet) throw new Error('Round active or insufficient demo credits.');
-      // Equal-weight local preview only. Live selection always belongs to RGS.
-      const pick = crypto.getRandomValues(new Uint32Array(1))[0] % books.length;
-      const book = books[pick];
+      const book = pickWeightedBook(books);
       amount -= bet;
       pending = { bet, book };
       return { balance: balance(), round: { betID: book.id, active: true, mode: 'base',

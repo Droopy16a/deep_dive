@@ -89,7 +89,7 @@ def complete_path(start: int, target: int, rng: random.Random) -> list[str]:
             return path[::-1]
         for item in order:
             next_value = apply_item(value, item)
-            if 0 < next_value <= 12800 and next_value not in parents:
+            if 0 < next_value <= max(12800, target * 3) and next_value not in parents:
                 parents[next_value] = (value, item)
                 queue.append(next_value)
     raise ValueError(f"Cannot construct exact route from {start} to {target}")

@@ -1,6 +1,7 @@
 """Stage source inside the SDK's required games/ layout, run, validate, export."""
 import csv
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,12 +12,16 @@ import zstandard
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "math/games/deep_dive"))
 from route import apply_item, scenery_clear
+from distribution import build_catalogue
+from fractions import Fraction
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "math/games/deep_dive"
 SDK = ROOT / ".stake/math-sdk"
 
 if __name__ == "__main__":
+    settings = json.loads((ROOT / "config/game.json").read_text())
+    catalogue = build_catalogue(settings)
     target = SDK / "games/deep_dive"
     if not (SDK / "src").is_dir():
         raise SystemExit("Run scripts/setup_math.py first.")
@@ -38,9 +43,15 @@ if __name__ == "__main__":
             books = [json.loads(line) for line in io.TextIOWrapper(stream)]
     with (publish / mode["weights"]).open(newline="") as table:
         weights = [tuple(map(int, row)) for row in csv.reader(table)]
+    backend = json.loads((library / "configs/config.json").read_text())
+    shelf = backend["bookShelfConfig"][0]
+    for info in [shelf["booksFile"], shelf["tables"][0]]:
+        assert hashlib.sha256((publish / info["file"]).read_bytes()).hexdigest() == info["sha256"]
+    assert shelf["rtp"] == settings["prototypeRtp"] and shelf["maxWin"] == settings["maxWin"]
     by_id = {book["id"]: book for book in books}
-    assert len(books) == len(weights) == len(by_id) == 100
+    assert len(books) == len(weights) == len(by_id) == len(catalogue)
     for sim_id, weight, payout in weights:
+        assert (payout, weight) == catalogue[sim_id]
         assert weight > 0 and by_id[sim_id]["payoutMultiplier"] == payout
         events = by_id[sim_id]["events"]
         assert [event["index"] for event in events] == list(range(len(events)))
@@ -64,11 +75,15 @@ if __name__ == "__main__":
             assert events[-2]["item"] == "ground"
             assert sum(e.get("item") == "mine" for e in events) >= 8
     rtp = sum(weight * payout for _, weight, payout in weights) / sum(w for _, w, _ in weights) / 100
-    assert abs(rtp - 0.96) < 1e-12
-    assert len({w for _, w, _ in weights}) == 1, "Demo sampler requires equal weights."
+    assert Fraction(sum(w * p for _, w, p in weights), sum(w for _, w, _ in weights) * 100) == Fraction(str(settings["prototypeRtp"]))
+    assert max(p for _, _, p in weights) == settings["maxWin"] * 100
+    for sim_id, weight, _ in weights:
+        by_id[sim_id]["selectionWeight"] = weight  # Local fixture metadata, not RGS events.
     fixture = ROOT / "frontend/public/demo-books.json"
     fixture.parent.mkdir(exist_ok=True)
-    fixture.write_text(json.dumps(books, indent=2) + "\n", encoding="utf-8")
+    temporary_fixture = fixture.with_suffix(".tmp")
+    temporary_fixture.write_text(json.dumps(books, indent=2) + "\n", encoding="utf-8")
+    temporary_fixture.replace(fixture)
     fe_config = library / "configs/config_fe_deep_dive.json"
     shutil.copy2(fe_config, ROOT / "frontend/public/math-config.json")
-    print(f"Validated {len(books)} books; toy RTP {rtp:.2%}. Output: {publish}")
+    print(f"Validated {len(books)} books; weighted RTP {rtp:.2%}. Output: {publish}")

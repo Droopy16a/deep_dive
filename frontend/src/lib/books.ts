@@ -5,7 +5,7 @@ export type SceneryObject = { id: string; item: SceneryItem; depth: number; dist
 export type DiveStep = { index: number; type: 'diveStep'; depth: number; distance: number; item: Item; multiplier: number; scenery?: SceneryObject[] };
 export type FinalWin = { index: number; type: 'finalWin'; amount: number };
 export type BookEvent = DiveStep | FinalWin;
-export type Book = { id: number; events: BookEvent[]; payoutMultiplier: number };
+export type Book = { id: number; events: BookEvent[]; payoutMultiplier: number; selectionWeight: number };
 export const itemLabels: Record<Item, string> = { launch: 'DIVE!', bubble: '+1', treasure: '+3', chest: '×2', pearl: '×3', mine: '÷2', wreck: 'WRECK', ground: 'SEABED' };
 export function applyItem(value: number, item: Item): number {
   switch (item) {

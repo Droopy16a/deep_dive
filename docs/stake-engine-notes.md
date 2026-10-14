@@ -42,3 +42,8 @@ Replace the enumerated treasure/mine model with the intended collection, multipl
 ## Version 0.2 follow-up (14 October 2026)
 
 The current model supersedes the original fifty_fifty demonstration: outcome catalogue 0/0.5/1/2/3/5/10×, 60 zero books, 96% exact weighted RTP. Python selects the target before a bounded route search; every air-bubble/treasure/chest/pearl/mine operation is replay-validated against that target. Mines use integer hundredths and floor on division. The frontend interpolates these immutable distance/depth contact points, bounces after positive encounters and settles only after terminal seabed contact. Terrain parallax is cosmetic and follows the same distance state. Both math and frontend must be republished together because the event schema now includes distance. See the rewritten README for current setup and rules.
+
+
+## Independent 97% / 250× model (14 October 2026)
+
+Official reference: https://bgaming.com/games/aviamasters lists 97% RTP and 250× maximum. Exact probabilities are not published in the reviewed sources. With user approval, Deep Dive uses independent probabilities matching those two targets only, retaining its own pickup rules. Aggregate integer weights are split across route books, written to the SDK lookup tables before config/hash generation, and mirrored into local demo selectionWeight metadata. Live book events do not select outcomes. No claim of identical hit rate or volatility is made.

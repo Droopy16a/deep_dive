@@ -65,13 +65,21 @@ try {
       assert.ok(steps.filter(step => step.item === 'mine').length >= 8);
     }
   }
-  assert.equal(zeroCount, 60);
+  const config = JSON.parse(await fs.readFile(path.join(root, 'config/game.json'), 'utf8'));
+  assert.equal(zeroCount, config.outcomes.find(entry => entry.multiplier === 0).books);
+  for (const entry of config.outcomes) {
+    const matches = books.filter(book => book.payoutMultiplier === entry.multiplier);
+    assert.equal(matches.length, entry.books);
+    assert.equal(matches.reduce((sum, book) => sum + book.selectionWeight, 0), entry.weight);
+  }
+  const totalWeight = books.reduce((sum, book) => sum + book.selectionWeight, 0);
+  assert.equal(books.reduce((sum, book) => sum + book.payoutMultiplier * book.selectionWeight, 0), Math.round(config.prototypeRtp * 100) * totalWeight);
+  assert.equal(Math.max(...books.map(book => book.payoutMultiplier)), config.maxWin * 100);
   assert.equal(fieldSignatures.size, books.length, 'scenery must vary between books');
-  assert.equal(books.reduce((sum, book) => sum + book.payoutMultiplier, 0), 9600);
   for (const name of ['bubble', 'treasure', 'chest', 'pearl', 'mine', 'wreck', 'ground']) assert.ok(items.has(name));
   const invalid = structuredClone(books[0].events); invalid[2].multiplier++;
   assert.throws(() => readEvents(invalid), /mismatch/);
   const premature = structuredClone(books[0].events); premature[2].depth = 100;
   assert.throws(() => readEvents(premature), /ground contact/);
-  console.log('PASS: 100 exact routes, wider encounter spacing, 100 unique scenery fields, swept-path collision clearance, all mechanics, ground finishes and unchanged 96% weighted return.');
+  console.log('PASS: 100 exact routes, wider encounter spacing, 100 unique scenery fields, swept-path collision clearance, all mechanics, ground finishes and exact 97% weighted return and 250x maximum.');
 } finally { for (const output of outputs) await fs.unlink(output); }

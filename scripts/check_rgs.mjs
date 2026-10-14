@@ -12,7 +12,7 @@ const output = ts.transpileModule(source, { compilerOptions: { module: ts.Module
 const temp = path.join(root, 'frontend/node_modules/.tmp/session-smoke.mjs');
 await fs.mkdir(path.dirname(temp), { recursive: true });
 await fs.writeFile(temp, output);
-const { createSession } = await import(pathToFileURL(temp).href);
+const { createSession, pickWeightedBook } = await import(pathToFileURL(temp).href);
 globalThis.window = new EventTarget();
 const originalInterval = globalThis.setInterval;
 globalThis.setInterval = () => 0; // Avoid SDK background balance polling in this test.
@@ -39,6 +39,16 @@ globalThis.fetch = async (url, options) => {
   throw new Error(`Unexpected endpoint: ${endpoint}`);
 };
 try {
+  const selected = new Map();
+  const totalWeight = books.reduce((sum, book) => sum + book.selectionWeight, 0);
+  for (let ticket = 0; ticket < totalWeight; ticket++) {
+    const book = pickWeightedBook(books, () => ticket);
+    selected.set(book.id, (selected.get(book.id) ?? 0) + 1);
+  }
+  for (const book of books) assert.equal(selected.get(book.id), book.selectionWeight);
+  const draws = [0xffffffff, 0];
+  assert.equal(pickWeightedBook(books, () => draws.shift()).id, books[0].id);
+  assert.equal(draws.length, 0, 'biased upper tail must be rejected');
   const url = 'https://example.invalid/game?sessionID=test-only&rgs_url=rgs.example.invalid&lang=en';
   const session = await createSession(url);
   await assert.rejects(session.play(1_000_000), /not authenticated/);
@@ -69,7 +79,7 @@ try {
     const ended = await demo.endRound();
     assert.equal(ended.balance.amount, played.balance.amount + played.round.payout);
   }
-  console.log('PASS: SDK lifecycle, integer amounts, runtime RGS host, double-bet guard, active-round recovery, API rejection, partial URL rejection, demo settlement.');
+  console.log('PASS: SDK lifecycle, integer amounts, runtime RGS host, double-bet guard, active-round recovery, API rejection, partial URL rejection, demo settlement, exhaustive weighted selection and modulo-bias rejection.');
 } finally {
   globalThis.setInterval = originalInterval;
   await fs.unlink(temp);
