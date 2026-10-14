@@ -122,5 +122,3 @@ The user-supplied GIF is stored locally in assets/submarine-scene.gif. Pinned gi
 ## Version 0.3 — scattered ocean field
 
 Real encounter gaps are randomized to 52–80 metres (previously 23–34); final approach is 65 metres. Travel duration scales with the gap so the submarine has room to move between collisions. Each book contains at least 60 randomly placed, scaled and rotated scenery objects in its launch event, including uncollected reward/mine icons plus harmless fish, shells and bottles. Objects fill the water above and below the route, scroll with the world and remain visible at the end. Reward/mine scenery is excluded from a swept hull-sized safety corridor; neutral scenery sits in the background and has no collision effect. All scenery is deterministic per book for replay/reconnect, and never changes value or adds payout-bearing events. Outcome frequencies and 96% RTP remain unchanged. Republish the refreshed math and frontend together to receive the new field data.
-#   d e e p _ d i v e  
- 
