@@ -1,0 +1,42 @@
+{
+  "id": "deep_dive",
+  "name": "Deep Dive",
+  "provider": "CZN Studios",
+  "version": "0.3.0",
+  "status": "prototype",
+  "providerNumber": 0,
+  "mode": "base",
+  "cost": 1.0,
+  "prototypeRtp": 0.96,
+  "maxWin": 10.0,
+  "outcomes": [
+    {
+      "multiplier": 0,
+      "books": 60
+    },
+    {
+      "multiplier": 50,
+      "books": 8
+    },
+    {
+      "multiplier": 100,
+      "books": 8
+    },
+    {
+      "multiplier": 200,
+      "books": 10
+    },
+    {
+      "multiplier": 300,
+      "books": 8
+    },
+    {
+      "multiplier": 500,
+      "books": 4
+    },
+    {
+      "multiplier": 1000,
+      "books": 2
+    }
+  ]
+}

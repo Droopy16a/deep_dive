@@ -1,0 +1,9 @@
+.stake/
+frontend/node_modules/
+frontend/dist/
+math/games/deep_dive/library/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
