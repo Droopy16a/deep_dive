@@ -1,0 +1,510 @@
+{
+  "rtp": 0.97,
+  "maxWin": 250.0,
+  "distribution": {
+    "type": "logarithmic",
+    "quantiles": 96,
+    "totalWeight": 100000,
+    "zeroWeight": 50000,
+    "zeroBooks": 50,
+    "maxWinWeight": 1
+  },
+  "outcomes": [
+    {
+      "multiplier": 0,
+      "weight": 50000,
+      "books": 50
+    },
+    {
+      "multiplier": 1,
+      "weight": 378,
+      "books": 1
+    },
+    {
+      "multiplier": 2,
+      "weight": 143,
+      "books": 1
+    },
+    {
+      "multiplier": 3,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 5,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 7,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 9,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 11,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 13,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 15,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 18,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 20,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 22,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 24,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 27,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 29,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 31,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 34,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 36,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 39,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 41,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 44,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 46,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 49,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 52,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 54,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 57,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 60,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 62,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 65,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 68,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 71,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 74,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 77,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 80,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 83,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 86,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 89,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 93,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 96,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 99,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 103,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 106,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 110,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 113,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 117,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 121,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 125,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 129,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 132,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 137,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 141,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 145,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 149,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 154,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 158,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 163,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 168,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 172,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 177,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 183,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 188,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 193,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 199,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 205,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 210,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 217,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 223,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 229,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 236,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 243,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 250,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 258,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 265,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 274,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 282,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 291,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 300,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 310,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 320,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 331,
+      "weight": 521,
+      "books": 1
+    },
+    {
+      "multiplier": 342,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 355,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 368,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 382,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 397,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 413,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 431,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 450,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 472,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 496,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 524,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 556,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 596,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 644,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 710,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 810,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 1024,
+      "weight": 520,
+      "books": 1
+    },
+    {
+      "multiplier": 25000,
+      "weight": 1,
+      "books": 1
+    }
+  ],
+  "description": "Independent logarithmic inverse-CDF model calibrated to 97% RTP and 250x maximum; not BGaming probabilities."
+}

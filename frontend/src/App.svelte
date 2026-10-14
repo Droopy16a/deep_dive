@@ -77,7 +77,7 @@
         mineDive = event.item === 'mine';
         if (bounce) tone(true);
         if (mineDive) { pitch = 28; tone(false); }
-        if (event.item === 'wreck' || event.item === 'ground') {
+        if (event.item === 'ground') {
           grounded = true; pitch = 0; lost = multiplier === 0;
         }
       } else { multiplier = event.amount / 100; }
@@ -149,7 +149,7 @@
 </script>
 
 <main class="game" class:playing={busy} style={`--play-scale:${playSize};--play-opacity:${playOpacity}`}>
-  <Ocean {progress} {distance} {pitch} {grounded} {busy} {lost} endDistance={routeSteps.at(-1)?.distance ?? 400}/>
+  <Ocean {progress} {distance} {pitch} {grounded} {busy} {lost}/>
   <header class="topbar">
     <div class="studio"><span class="studio-mark">CZN</span><span>DEEP DIVE<small>{demo ? 'FUN PLAY · DEMO' : 'CZN STUDIOS'}</small></span></div>
     <div class="wordmark" aria-hidden="true"><span>DEEP</span><strong>DIVE</strong><i>✦</i></div>
@@ -159,11 +159,11 @@
     </div>
   </header>
   <div class="session-label">{demo ? 'DEMO CREDITS · NO REAL MONEY' : 'RGS SESSION'}</div>
-  {#if !busy && !completed}<div class="intro"><span>THE OCEAN IS FULL OF SURPRISES</span><h1>Go deeper.</h1><p>Collect treasure. Watch for mines.<br/>Reach the wreck.</p></div>{/if}
+  {#if !busy && !completed}<div class="intro"><span>THE OCEAN IS FULL OF SURPRISES</span><h1>Go deeper.</h1><p>Collect treasure. Watch for mines.<br/>Explore the depths.</p></div>{/if}
   {#if busy}<div class="live-multiplier"><small>COLLECTED</small>{multiplier.toFixed(2)}<span>×</span></div>{/if}
   <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(bet)}</div>
   {#if busy || completed}{#each scenery as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110}<div class="route-token field-item" class:background-scenery={["fish","shell","bottle"].includes(object.item)} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span>{#if ['bubble','treasure','chest','pearl','mine'].includes(object.item)}<strong>{itemLabels[object.item as Item]}</strong>{/if}</div>{/if}{/each}{/if}
-  {#if busy}{#each routeSteps as step}{#if !['launch','wreck','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span><strong>{itemLabels[step.item]}</strong></div>{/if}{/each}{/if}
+  {#if busy}{#each routeSteps as step}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span><strong>{itemLabels[step.item]}</strong></div>{/if}{/each}{/if}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
   {#if completed && !busy}<div class="result" class:empty={multiplier === 0} role="status"><small>{status}</small><strong>{multiplier > 0 ? money(lastWin) : 'No treasure this time'}</strong><span>{multiplier.toFixed(2)}×</span></div>{/if}
   <div class="depth-scale" aria-hidden="true"><span>0m</span><i></i><span>50m</span><i></i><span>100m</span></div>
@@ -196,7 +196,7 @@
       {:else if modal === 'auto'}
         <p>Choose a number of dives. Stop autoplay at any time; the current dive will finish.</p><div class="bet-grid">{#each [10, 25, 50] as count}<button disabled={!canPlay || !!flags?.disabledAutoplay} onclick={() => startAuto(count)}>{count} dives</button>{/each}</div>
       {:else}
-        <p>Collect air bubbles (+1), treasure (+3), gold chests (×2) and pearls (×3). Each collectible bounces the submarine upward. Mines halve the multiplier and send it deeper. The round finishes only when the submarine touches the seabed, at the wreck on a winning route.</p><p>Start at 1×. Mine halves round down to 0.01×; enough mines reduce the value to zero. The prototype pays 0× to 10× with a 96% weighted return. Outcomes are chosen before their routes are built. Speed changes animation only.</p><p>{demo ? 'Fun play uses demo credits only. Reload resets your balance.' : 'Results and balance are supplied by the game server.'}</p>
+        <p>Collect air bubbles (+1), treasure (+3), gold chests (×2) and pearls (×3). Each collectible bounces the submarine upward. Mines halve the multiplier and send it deeper. The round finishes only when the submarine touches the seabed, on every route.</p><p>Start at 1×. Mine halves round down to 0.01×; enough mines reduce the value to zero. Payouts use a logarithmic curve with fractional multipliers, a 97% theoretical return and a 250× maximum. This is an independent Deep Dive model. Outcomes are chosen before their routes are built. Speed changes animation only.</p><p>{demo ? 'Fun play uses demo credits only. Reload resets your balance.' : 'Results and balance are supplied by the game server.'}</p>
       {/if}
     </div></div>
   {/if}

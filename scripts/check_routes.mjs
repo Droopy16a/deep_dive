@@ -65,7 +65,7 @@ try {
       assert.ok(steps.filter(step => step.item === 'mine').length >= 8);
     }
   }
-  const config = JSON.parse(await fs.readFile(path.join(root, 'config/game.json'), 'utf8'));
+  const config = JSON.parse(await fs.readFile(path.join(root, 'frontend/public/math-model.json'), 'utf8'));
   assert.equal(zeroCount, config.outcomes.find(entry => entry.multiplier === 0).books);
   for (const entry of config.outcomes) {
     const matches = books.filter(book => book.payoutMultiplier === entry.multiplier);
@@ -73,13 +73,19 @@ try {
     assert.equal(matches.reduce((sum, book) => sum + book.selectionWeight, 0), entry.weight);
   }
   const totalWeight = books.reduce((sum, book) => sum + book.selectionWeight, 0);
-  assert.equal(books.reduce((sum, book) => sum + book.payoutMultiplier * book.selectionWeight, 0), Math.round(config.prototypeRtp * 100) * totalWeight);
+  assert.equal(books.reduce((sum, book) => sum + book.payoutMultiplier * book.selectionWeight, 0), Math.round(config.rtp * 100) * totalWeight);
   assert.equal(Math.max(...books.map(book => book.payoutMultiplier)), config.maxWin * 100);
+  assert.ok(books.filter(book => book.payoutMultiplier > 0 && book.payoutMultiplier % 100 !== 0).length >= 80, 'log curve needs fractional payouts');
+  const zeroSteps = books.filter(book => book.payoutMultiplier === 0).map(book => book.events.filter(event => event.type === 'diveStep'));
+  const zeroLengths = zeroSteps.map(steps => steps.at(-1).distance);
+  assert.ok(Math.max(...zeroLengths) > Math.min(...zeroLengths) * 1.35, 'same payout needs varied journey lengths');
+  assert.ok(new Set(zeroSteps.map(steps => steps.length)).size >= 5, 'encounter counts must vary');
+  assert.ok(books.every(book => book.events.at(-2).item === 'ground'), 'all payouts must land on seabed');
   assert.equal(fieldSignatures.size, books.length, 'scenery must vary between books');
-  for (const name of ['bubble', 'treasure', 'chest', 'pearl', 'mine', 'wreck', 'ground']) assert.ok(items.has(name));
+  for (const name of ['bubble', 'treasure', 'chest', 'pearl', 'mine', 'ground']) assert.ok(items.has(name));
   const invalid = structuredClone(books[0].events); invalid[2].multiplier++;
   assert.throws(() => readEvents(invalid), /mismatch/);
   const premature = structuredClone(books[0].events); premature[2].depth = 100;
   assert.throws(() => readEvents(premature), /ground contact/);
-  console.log('PASS: 100 exact routes, wider encounter spacing, 100 unique scenery fields, swept-path collision clearance, all mechanics, ground finishes and exact 97% weighted return and 250x maximum.');
+  console.log(`PASS: ${books.length} exact routes, fractional logarithmic payouts, varied lengths/counts, scenery clearance, seabed-only finishes, 97% RTP and 250x maximum.`);
 } finally { for (const output of outputs) await fs.unlink(output); }

@@ -7,69 +7,15 @@
   "providerNumber": 0,
   "mode": "base",
   "cost": 1.0,
-  "prototypeRtp": 0.97,
+  "prototypeRtp": 0.964,
   "maxWin": 250.0,
-  "outcomes": [
-    {
-      "multiplier": 0,
-      "books": 50,
-      "weight": 50000
-    },
-    {
-      "multiplier": 50,
-      "books": 8,
-      "weight": 5000
-    },
-    {
-      "multiplier": 100,
-      "books": 8,
-      "weight": 5000
-    },
-    {
-      "multiplier": 150,
-      "books": 8,
-      "weight": 6100
-    },
-    {
-      "multiplier": 200,
-      "books": 12,
-      "weight": 28900
-    },
-    {
-      "multiplier": 300,
-      "books": 5,
-      "weight": 3000
-    },
-    {
-      "multiplier": 500,
-      "books": 4,
-      "weight": 1500
-    },
-    {
-      "multiplier": 1000,
-      "books": 1,
-      "weight": 450
-    },
-    {
-      "multiplier": 2000,
-      "books": 1,
-      "weight": 40
-    },
-    {
-      "multiplier": 5000,
-      "books": 1,
-      "weight": 8
-    },
-    {
-      "multiplier": 10000,
-      "books": 1,
-      "weight": 1
-    },
-    {
-      "multiplier": 25000,
-      "books": 1,
-      "weight": 1
-    }
-  ],
-  "mathModel": "Independent Deep Dive approximation of public Aviamasters RTP/max-win targets; not BGaming probabilities."
+  "mathModel": "Independent logarithmic inverse-CDF model calibrated to 97% RTP and 250x maximum; not BGaming probabilities.",
+  "distribution": {
+    "type": "logarithmic",
+    "quantiles": 96,
+    "totalWeight": 100000,
+    "zeroWeight": 50000,
+    "zeroBooks": 50,
+    "maxWinWeight": 1
+  }
 }

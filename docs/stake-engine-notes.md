@@ -47,3 +47,8 @@ The current model supersedes the original fifty_fifty demonstration: outcome cat
 ## Independent 97% / 250× model (14 October 2026)
 
 Official reference: https://bgaming.com/games/aviamasters lists 97% RTP and 250× maximum. Exact probabilities are not published in the reviewed sources. With user approval, Deep Dive uses independent probabilities matching those two targets only, retaining its own pickup rules. Aggregate integer weights are split across route books, written to the SDK lookup tables before config/hash generation, and mirrored into local demo selectionWeight metadata. Live book events do not select outcomes. No claim of identical hit rate or volatility is made.
+
+
+## Logarithmic distribution and seabed-only finish
+
+The regular positive distribution now uses -s*ln(1-u) at 96 quantiles, rounded to hundredths with adjacent-cent probability splitting for exact RTP. Zero mass and the rare cap remain explicit. The generated math-model.json records the resulting weights. Routes vary opening length, exact-value detours, spacing range and final approach. All terminal events are ground; the boat/wreck rendering and event were removed. Route checks verify fractional outcomes, same-payout length/count variation, arithmetic, scenery clearance and ground-only finishes.

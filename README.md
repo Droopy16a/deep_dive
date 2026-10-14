@@ -35,40 +35,29 @@ A round starts at **1×**. The camera tracks horizontally; the ocean's foregroun
 | Gold chest | ×2 | Bounce upward |
 | Pearl | ×3 | Bounce upward |
 | Naval mine | ÷2 | Dive downward |
-| Wreck / seabed | Final value | Finish on ground contact |
+| Seabed | Final value | Finish on ground contact |
 
 Values use integer hundredths: 100 means 1×. Each mine halves the current value and **rounds down to 0.01×**. For example, 1.87× becomes 0.93×; 0.01× becomes 0×. This makes zero reachable through actual mine effects, with no hidden final override.
 
-The math module selects a payout from the configured catalogue **before generating its route**. It creates a rewarding opening with all four positive mechanics, then searches for an exact sequence of encounters. A zero target gets a mine-heavy ending until value naturally reaches zero. The final route point is ground contact (depth 100); winning routes reach the wreck there. No earlier point reaches the seabed. Motion between positive contacts contains an upward arc; mine hits cause descent. Settlement and the final result wait for the ground-contact animation to complete.
+The math module selects a payout from the configured catalogue **before generating its route**. It creates a varied rewarding opening, then searches for an exact sequence of encounters. A zero target gets a mine-heavy ending until value naturally reaches zero. The final route point is ground contact (depth 100); all routes land directly on the seabed. No earlier point reaches the seabed. Motion between positive contacts contains an upward arc; mine hits cause descent. Settlement and the final result wait for the ground-contact animation to complete.
 
 The frontend never chooses live payouts or rewrites server events. Stake Engine selects one precomputed book before playback. In local demo, a book is chosen before its animation starts. The word “payout-first” describes the math generation order, not client-side live game math.
 
-## Custom payout distribution — 97% RTP / 250× maximum
+## Logarithmic payout distribution — 97% RTP / 250× maximum
 
-This independent Deep Dive model matches the public RTP and maximum listed on [BGaming’s official Aviamasters page](https://bgaming.com/games/aviamasters). Exact probabilities are not disclosed in the reviewed sources. This is an approximation, not BGaming’s math or a claim of identical hit rate/volatility. Deep Dive keeps its own pickup rules.
+Deep Dive uses an independent model, not BGaming’s undisclosed exact probabilities. The regular positive payout curve is `m(u) = -s × ln(1-u)`, evaluated at 96 evenly spaced probability quantiles. The scale `s` is calibrated to the target return; payouts are quantized to 0.01×. Probability mass is split between adjacent cents to remove the rounding error exactly. This creates fractional payouts instead of a handful of fixed integer tiers. The formula governs outcome selection, not a continuously rising on-screen counter: pickups still apply their exact +1/+3/×2/×3/÷2 effects.
 
-There are 100 route books and 100,000 total selection weight:
+Zero outcomes retain 50% probability. A separate rare 250× outcome retains weight 1 out of 100,000. Remaining probability follows the logarithmic quantiles. Total weighted gross return is exactly 97% (3% house edge). These probabilities and the logarithmic model are Deep Dive design choices; no claim of matching Aviamasters’ hit rate/volatility is made. This remains prototype math.
 
-| Payout | Probability | Aggregate weight | Route books |
-| --- | ---: | ---: | ---: |
-| 0× | 50% | 50000 | 50 |
-| 0.5× | 5% | 5000 | 8 |
-| 1× | 5% | 5000 | 8 |
-| 1.5× | 6.1% | 6100 | 8 |
-| 2× | 28.9% | 28900 | 12 |
-| 3× | 3% | 3000 | 5 |
-| 5× | 1.5% | 1500 | 4 |
-| 10× | 0.45% | 450 | 1 |
-| 20× | 0.04% | 40 | 1 |
-| 50× | 0.008% | 8 | 1 |
-| 100× | 0.001% | 1 | 1 |
-| 250× | 0.001% | 1 | 1 |
+Tune `config/game.json`: `distribution.quantiles` controls positive payout resolution; `totalWeight`, `zeroWeight`, `zeroBooks`, and `maxWinWeight` control the explicit masses and route variety. `prototypeRtp` and `maxWin` remain 0.97 and 250. The generator rejects impossible parameters, calibrates exact integer weights, and exports the complete generated table in `frontend/public/math-model.json`. Regenerate, check, build and upload both packages after changes. It also still supports an explicit `outcomes` table if the `distribution` object is removed.
 
-Exact theoretical gross return is 97% of stake (3% house edge); maximum final payout is 250×, with probability 1 in 100,000. Zero pays nothing (50%); 0.5× loses half the stake (5%); 1× returns the stake (5%); payouts above the stake total 40%. These probabilities are our design choices. Short sessions need not resemble theoretical RTP. This remains prototype math, not certified casino math.
+Live RGS selects using the lookup CSV’s middle column. Fun play uses the same weights with unbiased rejection sampling. SDK simulation progress shows the unweighted route-catalogue average, not the final weighted RTP. We apply weights before SDK config/hash generation. Collected value can exceed the final payout before mines; the cap applies to final payout.
 
-To tune the model, edit `config/game.json`. `multiplier` uses hundredths (25000 = 250×). `weight` is aggregate outcome weight; probability = weight / sum of weights. `books` controls route variety, not probability. The generator splits weight into positive integer shares across the books. Weight must be at least book count. Set `prototypeRtp` to the exact weighted mean and `maxWin` to the highest final payout; then regenerate, check, build and upload both packages. Invalid targets fail generation.
+## Variable journeys and seabed finish
 
-Live selection uses the lookup CSV’s middle column. Fun play uses the same weights with unbiased integer rejection sampling. SDK simulation progress shows the unweighted route-catalogue average during generation; the final weighted lookup determines RTP. We apply weights before SDK config/hash generation. Collected value can exceed final payout before mines; the cap applies to final payout.
+Every route starts with the four positive pickup types in shuffled order, then adds zero to three extra positive encounters and zero to four exact-value chest/mine detours. The exact target route is solved afterwards. Each journey chooses its own spacing range (minimum 52 metres), with a random 60–150 metre final approach. Extra encounters and wider gaps make duration and length vary even for the same payout. All geometry is stored in the event book so replay/reconnect remains deterministic.
+
+Every route ends with `ground` at depth 100, regardless of payout. The wreck graphic and wreck event have been removed. The submarine lands directly on the seabed and settles only after ground contact. Positive pickups still bounce upward; mines tilt and bounce downward. Decorative pickups remain clear of the swept submarine path.
 
 ## Verify, build and upload
 
@@ -80,7 +69,7 @@ npm.cmd run check
 npm.cmd run build
 ```
 
-The math runner verifies payout-table/book IDs, weights, every arithmetic transition, final win, event order, ground termination and RTP. The frontend route check cross-validates all 100 Python books, bounce arcs, natural zero outcomes and absence of premature ground contact. The RGS check uses the actual pinned client with mocked responses; it places no external bets.
+The math runner verifies payout-table/book IDs, weights, every arithmetic transition, final win, event order, ground termination and RTP. The frontend route check cross-validates all generated Python books, bounce arcs, natural zero outcomes and absence of premature ground contact. The RGS check uses the actual pinned client with mocked responses; it places no external bets.
 
 **Version 0.2 requires replacing both frontend and math together.** Older v0.1 event books lack distance and do not match the new mechanics.
 
@@ -133,4 +122,4 @@ The user-supplied GIF is stored locally in assets/submarine-scene.gif. Pinned gi
 
 ## Version 0.3 — scattered ocean field
 
-Real encounter gaps are randomized to 52–80 metres (previously 23–34); final approach is 65 metres. Travel duration scales with the gap so the submarine has room to move between collisions. Each book contains at least 60 randomly placed, scaled and rotated scenery objects in its launch event, including uncollected reward/mine icons plus harmless fish, shells and bottles. Objects fill the water above and below the route, scroll with the world and remain visible at the end. Reward/mine scenery is excluded from a swept hull-sized safety corridor; neutral scenery sits in the background and has no collision effect. All scenery is deterministic per book for replay/reconnect, and never changes value or adds payout-bearing events. Scenery does not affect outcome probabilities; see the current model above. Republish the refreshed math and frontend together to receive the new field data.
+Encounter gaps and the final approach now vary by route; see Variable journeys above. Travel duration scales with the gap so the submarine has room to move between collisions. Each book contains at least 60 randomly placed, scaled and rotated scenery objects in its launch event, including uncollected reward/mine icons plus harmless fish, shells and bottles. Objects fill the water above and below the route, scroll with the world and remain visible at the end. Reward/mine scenery is excluded from a swept hull-sized safety corridor; neutral scenery sits in the background and has no collision effect. All scenery is deterministic per book for replay/reconnect, and never changes value or adds payout-bearing events. Scenery does not affect outcome probabilities; see the current model above. Republish the refreshed math and frontend together to receive the new field data.

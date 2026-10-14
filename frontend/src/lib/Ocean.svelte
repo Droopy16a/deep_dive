@@ -1,6 +1,6 @@
 <script lang="ts">
   import AnimatedSub from './AnimatedSub.svelte';
-  let { progress, distance, pitch, grounded, endDistance, busy, lost }: { progress: number; distance: number; pitch: number; grounded: boolean; endDistance: number; busy: boolean; lost: boolean } = $props();
+  let { progress, distance, pitch, grounded, busy, lost }: { progress: number; distance: number; pitch: number; grounded: boolean; busy: boolean; lost: boolean } = $props();
 </script>
 <svg class="ocean-art" viewBox="0 0 1200 740" preserveAspectRatio="none" aria-hidden="true">
   <defs>
@@ -26,13 +26,7 @@
   <rect width="1200" height="740" fill="url(#moving-floor)"/>
   <path d="M0 622H1200" stroke="#70a7a0" stroke-opacity=".32" stroke-width="2"/>
   <g transform={`translate(${80 - distance * 8.4} 220)`}><path d="M-80 0H120L158 15H-80Z" fill="#2b4c60"/><path d="M-80 -14H102L120 0H-80Z" fill="#78949d"/><path d="M-30 -14V-56H-22V-14M80 -14V-39H88V-14" stroke="#637d89" stroke-width="5"/><path d="M-80 18H105L87 32H-80Z" fill="#132c43"/></g>
-  <g transform={`translate(${450 + (endDistance - distance) * 8.4} 605) rotate(-8)`}>
-    <path d="M-100 10H133L99 52H-73Z" fill="#466063" stroke="#6e7c6e" stroke-width="2"/>
-    <path d="M-47 10V-26H61V10M-22 -26V-52H25V-26M7 -52V-115" fill="#354e58" stroke="#6a796a" stroke-width="3"/>
-    <path d="M8 -107L63 -71H8Z" fill="#667f78" opacity=".4"/>
-    <g fill="#102b3b"><circle cx="-55" cy="26" r="6"/><circle cx="-26" cy="26" r="6"/><circle cx="4" cy="26" r="6"/><circle cx="34" cy="26" r="6"/><circle cx="64" cy="26" r="6"/></g>
-    <ellipse cx="12" cy="64" rx="175" ry="35" fill="url(#glow)"/>
-  </g>
+
 </svg>
 <svg class="submarine-art" viewBox="-160 -80 420 160" aria-hidden="true" style={`left:32%;top:calc(${16 + progress * .68}% - var(--sub-width) * ${progress / 100 * 46 / 420})`}>
   <g class:sub-travelling={busy} class:sub-lost={lost}>

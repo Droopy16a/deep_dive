@@ -1,12 +1,12 @@
 // Game-specific route contract. This does not add or change RGS endpoints.
-export type Item = 'launch' | 'bubble' | 'treasure' | 'chest' | 'pearl' | 'mine' | 'wreck' | 'ground';
+export type Item = 'launch' | 'bubble' | 'treasure' | 'chest' | 'pearl' | 'mine' | 'ground';
 export type SceneryItem = 'bubble' | 'treasure' | 'chest' | 'pearl' | 'mine' | 'fish' | 'shell' | 'bottle';
 export type SceneryObject = { id: string; item: SceneryItem; depth: number; distance: number; scale: number; rotation: number };
 export type DiveStep = { index: number; type: 'diveStep'; depth: number; distance: number; item: Item; multiplier: number; scenery?: SceneryObject[] };
 export type FinalWin = { index: number; type: 'finalWin'; amount: number };
 export type BookEvent = DiveStep | FinalWin;
 export type Book = { id: number; events: BookEvent[]; payoutMultiplier: number; selectionWeight: number };
-export const itemLabels: Record<Item, string> = { launch: 'DIVE!', bubble: '+1', treasure: '+3', chest: '×2', pearl: '×3', mine: '÷2', wreck: 'WRECK', ground: 'SEABED' };
+export const itemLabels: Record<Item, string> = { launch: 'DIVE!', bubble: '+1', treasure: '+3', chest: '×2', pearl: '×3', mine: '÷2', ground: 'SEABED' };
 export function applyItem(value: number, item: Item): number {
   switch (item) {
     case 'bubble': return value + 100;
@@ -36,12 +36,12 @@ export function readEvents(state: unknown): BookEvent[] {
           Number.isFinite(object.rotation))) throw new Error('Invalid scenery field');
       }
       const terminal = index === state.length - 2;
-      if (terminal !== (event.item === 'wreck' || event.item === 'ground') || terminal !== (event.depth === 100)) throw new Error('A route must finish on ground contact');
+      if (terminal !== (event.item === 'ground') || terminal !== (event.depth === 100)) throw new Error('A route must finish on ground contact');
       value = applyItem(value, event.item);
       if (!Number.isSafeInteger(event.multiplier) || event.multiplier !== value) throw new Error('Encounter payout mismatch');
       distance = event.distance;
     }
   }
-  if (state.at(-2).item !== (value === 0 ? 'ground' : 'wreck')) throw new Error('Ground result does not match the payout');
+  if (state.at(-2).item !== 'ground') throw new Error('A route must finish on the seabed');
   return state as BookEvent[];
 }

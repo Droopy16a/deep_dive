@@ -67,13 +67,17 @@ def apply_item(value: int, item: str) -> int:
         return value * 3
     if item == "mine":
         return value // 2
-    if item in ("launch", "wreck", "ground"):
+    if item in ("launch", "ground"):
         return value
     raise ValueError(f"Unknown encounter: {item}")
 
 
 def complete_path(start: int, target: int, rng: random.Random) -> list[str]:
     """Bounded breadth-first search; never patch the final payout afterwards."""
+    prefix = []
+    while start > max(12800, target * 3):
+        prefix.append("mine")
+        start = apply_item(start, "mine")
     order = list(OPERATIONS)
     rng.shuffle(order)
     queue = deque([start])
@@ -86,7 +90,7 @@ def complete_path(start: int, target: int, rng: random.Random) -> list[str]:
                 previous, item = parents[value]
                 path.append(item)
                 value = previous
-            return path[::-1]
+            return prefix + path[::-1]
         for item in order:
             next_value = apply_item(value, item)
             if 0 < next_value <= max(12800, target * 3) and next_value not in parents:
@@ -100,6 +104,11 @@ def generate_route(target: int, seed: int) -> list[dict]:
     # Every route begins with a rewarding mix of all four positive mechanics.
     items = ["bubble", "treasure", "chest", "pearl"]
     rng.shuffle(items)
+    # Vary both encounter count and travel distance independently of the target.
+    items.extend(rng.choices(OPERATIONS[:-1], k=rng.randint(0, 3)))
+    for _ in range(rng.randint(0, 4)):
+        position = rng.randrange(len(items) + 1)
+        items[position:position] = ["chest", "mine"]  # Exact identity, including odd cents.
     value = 100
     for item in items:
         value = apply_item(value, item)
@@ -114,8 +123,9 @@ def generate_route(target: int, seed: int) -> list[dict]:
     value, distance, depth = 100, 0, 30
     events = [{"type": "diveStep", "item": "launch", "distance": 0,
                "depth": depth, "multiplier": value}]
+    gap_max = rng.randint(80, 136)
     for index, item in enumerate(items):
-        distance += rng.randint(52, 80)
+        distance += rng.randint(52, gap_max)
         if item == "mine":
             remaining = items[index:].count("mine")
             depth = min(90, depth + max(3, (88 - depth) // (remaining + 1)))
@@ -125,8 +135,8 @@ def generate_route(target: int, seed: int) -> list[dict]:
         events.append({"type": "diveStep", "item": item, "distance": distance,
                        "depth": depth, "multiplier": value})
     assert value == target
-    events.append({"type": "diveStep", "item": "wreck" if target else "ground",
-                   "distance": distance + 65, "depth": 100, "multiplier": value})
+    events.append({"type": "diveStep", "item": "ground",
+                   "distance": distance + rng.randint(60, 150), "depth": 100, "multiplier": value})
     # Presentation only. Kept in the book so reconnect/replay shows the same sea.
     events[0]["scenery"] = generate_scenery(events, seed)
     return events

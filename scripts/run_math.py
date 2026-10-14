@@ -12,7 +12,7 @@ import zstandard
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "math/games/deep_dive"))
 from route import apply_item, scenery_clear
-from distribution import build_catalogue
+from distribution import build_catalogue, build_outcomes
 from fractions import Fraction
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         assert [event["index"] for event in events] == list(range(len(events)))
         assert events[-1]["type"] == "finalWin" and events[-1]["amount"] == payout
         value, distance = 100, -1
-        assert events[-2]["item"] in ("wreck", "ground") and events[-2]["depth"] == 100
+        assert events[-2]["item"] == "ground" and events[-2]["depth"] == 100
         for event in events[:-1]:
             value = apply_item(value, event["item"])
             assert event["multiplier"] == value
@@ -84,6 +84,11 @@ if __name__ == "__main__":
     temporary_fixture = fixture.with_suffix(".tmp")
     temporary_fixture.write_text(json.dumps(books, indent=2) + "\n", encoding="utf-8")
     temporary_fixture.replace(fixture)
+    (ROOT / "frontend/public/math-model.json").write_text(json.dumps({
+        "rtp": settings["prototypeRtp"], "maxWin": settings["maxWin"],
+        "distribution": settings["distribution"], "outcomes": build_outcomes(settings),
+        "description": settings["mathModel"],
+    }, indent=2) + "\n", encoding="utf-8")
     fe_config = library / "configs/config_fe_deep_dive.json"
     shutil.copy2(fe_config, ROOT / "frontend/public/math-config.json")
     print(f"Validated {len(books)} books; weighted RTP {rtp:.2%}. Output: {publish}")
