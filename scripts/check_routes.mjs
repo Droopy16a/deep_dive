@@ -80,6 +80,10 @@ try {
         previous=point.distance;
       }
       assert.ok(Math.abs(sampleFlight(steps,duration,duration).depth-last.depth)<1e-9);
+      if(last.item==='ground') {
+        camera=followCamera(camera,last.depth,mode.depth,33);
+        assert.ok(.364+worldY(last.depth,mode.depth)-camera<.80,'landed submarine clears the balance bar');
+      }
       total+=book.selectionWeight;weighted+=book.selectionWeight*book.payoutMultiplier;
       if(book.payoutMultiplier>0)winningWeight+=book.selectionWeight;
     }

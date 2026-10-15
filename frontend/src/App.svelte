@@ -54,6 +54,7 @@
   const speedAllowed = (index: number) => index < 2 || (index === 2 ? !flags?.disabledTurbo : !flags?.disabledSuperTurbo);
   const canPlay = $derived(!replay && ready && !busy && !blocked && balance.amount >= bet);
   const insufficient = $derived(!replay && ready && !blocked && !busy && balance.amount < bet);
+  const shakeIntensity = $derived(busy && !completed ? Math.pow(Math.max(0, Math.min(1, (multiplier - 1) / 249)), 1.3) : 0);
 
   function toggleSound() {
     sound = !sound;
@@ -149,7 +150,7 @@
   }
   async function dive() {
     if (!canPlay) return;
-    busy = true; error = ''; modal = null; completed = false;
+    busy = true; error = ''; modal = null; completed = false; multiplier = 1;
     try {
       tone();
       const result = await session.play(bet, selectedDepth);
@@ -254,8 +255,8 @@
 <svelte:head><title>{GAME_TITLE} · CZN Studios{replay ? ' · Replay' : ''}</title></svelte:head>
 <svelte:window onkeydown={spacebar}/>
 
-<main class="game" class:playing={busy} class:launching={launching} style={`--play-scale:${playSize};--play-opacity:${playOpacity}`}>
-  <Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake}/>
+<main class="game" class:playing={busy} class:launching={launching} class:shaking={shakeIntensity > 0} style={`--play-scale:${playSize};--play-opacity:${playOpacity};--shake-offset:${shakeIntensity * 6}px`}>
+  <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake}/></div>
   <header class="topbar">
     <div class="studio"><span class="studio-mark">CZN</span><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : 'CZN STUDIOS'}</small></span></div>
     <div class="wordmark"><GameWordmark/></div>
@@ -267,7 +268,7 @@
   <div class="session-label">{replay ? 'RECORDED ROUND · VIEW ONLY' : demo ? (social ? 'DEMO · SIMULATED COINS' : 'DEMO · SIMULATED BALANCE') : 'RGS SESSION'}</div>
   {#if ready || busy}
   {#if !completed}<div class="live-multiplier" aria-label={`Current multiplier ${multiplier.toFixed(2)} times`}>{multiplier.toFixed(2)}<span>x</span></div>{/if}
-  <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(bet)}</div>
+  <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(busy ? Math.round(bet * multiplier) : completed ? lastWin : bet)}</div>
   {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
   {#if busy}{#each routeSteps as step (step.index)}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span></div>{/if}{/each}{/if}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
@@ -282,7 +283,7 @@
     {#if replay}
       <div class="replay-details"><strong>{replayData?.modeLabel} · Replay</strong><span>Play amount: {money(bet)}</span><span>Cost multiplier: {replayData?.costMultiplier}× · {social ? 'Total play' : 'Round cost'}: {money(bet * (replayData?.costMultiplier ?? 1))}</span></div>
     {:else}
-      <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="depth-bet-controls"><label class="depth-control"><small>DIFFICULTY</small><span class="difficulty-select"><select aria-label="Difficulty" value={selectedDepth} onchange={(event) => changeDifficulty(Number(event.currentTarget.value))} disabled={busy || !!autoRemaining || !ready}>{#each difficulties as difficulty}<option value={difficulty.depth}>{difficulty.label}</option>{/each}</select><Icon name="chevron-down" size={18}/></span></label><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><span><small>TOTAL PLAY</small><strong>{money(bet)}</strong></span><Icon name="chevron-down" size={18}/></button></div></div></div>
+      <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="depth-bet-controls"><label class="depth-control"><small>DIFFICULTY</small><span class="difficulty-select"><select aria-label="Difficulty" value={selectedDepth} onchange={(event) => changeDifficulty(Number(event.currentTarget.value))} disabled={busy || !!autoRemaining || !ready}>{#each difficulties as difficulty}<option value={difficulty.depth}>{difficulty.label}</option>{/each}</select><Icon name="chevron-down" size={18}/></span></label><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><span><small>TOTAL PLAY</small><strong>{money(bet)}</strong></span></button><div class="bet-arrows"><button aria-label="Increase play amount" onclick={() => changeBet(1)} disabled={busy || !!autoRemaining || !ready || bet === levels.at(-1)}><Icon name="chevron-up" size={14}/></button><button aria-label="Decrease play amount" onclick={() => changeBet(-1)} disabled={busy || !!autoRemaining || !ready || bet === levels[0]}><Icon name="chevron-down" size={14}/></button></div></div></div></div>
     {/if}
     <p class="depth-odds">{selectedMode ? `${selectedDepth} m seabed · ${(selectedMode.winProbability * 100).toFixed(1)}% landing chance · ×${selectedMode.landingBonus} landing bonus` : "Preparing depths"}</p>
     <p class="game-status" aria-live="polite" id="play-explanation">{error || (insufficient ? 'Your balance is too low for this play amount.' : autoRemaining ? `Autoplay · ${autoRemaining} dives remaining` : '')}</p>
@@ -308,7 +309,6 @@
         <button class="outline-button" onclick={() => { playSize = 1; playOpacity = 1; }}>Reset play button</button>
         <button class="text-button" onclick={() => modal = 'rules'}><Icon name="info" size={18}/> How to play</button>
       {:else if modal === 'bet'}
-        <div class="amount-stepper"><button aria-label="Decrease play amount" disabled={busy || !!autoRemaining || bet === levels[0]} onclick={() => changeBet(-1)}><Icon name="minus"/> Lower</button><strong>{money(bet)}</strong><button aria-label="Increase play amount" disabled={busy || !!autoRemaining || bet === levels.at(-1)} onclick={() => changeBet(1)}>Higher <Icon name="plus"/></button></div>
         <div class="bet-grid">{#each levels as amount}<button class:selected={amount === bet} disabled={busy || !!autoRemaining} onclick={() => { bet = amount; modal = null; }}>{money(amount)}</button>{/each}</div>
       {:else if modal === 'auto'}
         <p>Choose a number of dives. Stop autoplay at any time; the current dive will finish.</p><div class="bet-grid">{#each [10, 25, 50] as count}<button disabled={!canPlay || !!flags?.disabledAutoplay} onclick={() => startAuto(count)}>{count} dives</button>{/each}</div>
@@ -324,7 +324,7 @@
         {#if replay}
           <p>Start replay watches the recorded round. Play again restarts that same round after it finishes. The mode, original play amount, cost multiplier and total play are shown below the ocean. Replay is view only; no new plays can be placed. Reconnect reloads this same recording if a connection error occurs.</p>
         {:else}
-          <p>Start dive begins one round at the displayed total play. Space also starts one round when no menu is open and this shortcut is available in your region. Total play opens the server's allowed amounts; Lower and Higher move one level and stop at the ends. Choose an amount or close the panel to return. Difficulty selects Easy, Medium or Hard. Amount and difficulty lock while a round or autoplay is running.</p>
+          <p>Start dive begins one round at the displayed total play. Space also starts one round when no menu is open and this shortcut is available in your region. The up and down arrows change total play by one allowed amount and stop at the ends. Total play also opens the server's allowed amounts. Choose an amount or close the panel to return. Difficulty selects Easy, Medium or Hard. Amount and difficulty lock while a round or autoplay is running.</p>
           <p>Autoplay opens a confirmation menu. Choose 10, 25 or 50 dives to start. Press its stop control to finish the current round and cancel the remaining dives. Autoplay stops if the balance is too low or a connection error occurs. It may be unavailable in some regions. The balance shows the available amount; the result shows the last round's gross win and multiplier.</p>
         {/if}
         <p>Slow, Normal, Fast and Turbo change animation speed, including during playback. Faster options may be unavailable in some regions. The speaker mutes or enables every sound; the same control is in Settings. The menu opens Settings; How to play opens these rules. Play button size and opacity adjust the main control; Reset play button restores both defaults. Close dismisses any panel; Escape also closes it. Reconnect reloads the game and recovers any unfinished live round. There is no fullscreen or feature activation control.</p>
