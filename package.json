@@ -6,8 +6,12 @@
     "dev": "npm --prefix frontend run dev -- --host 127.0.0.1",
     "check": "npm --prefix frontend run check",
     "test:rgs": "node scripts/check_rgs.mjs",
+    "test:platform": "node scripts/check_platform.mjs",
     "test:routes": "node scripts/check_routes.mjs",
     "build": "npm --prefix frontend run build",
-    "preview": "npm --prefix frontend run preview -- --host 127.0.0.1"
+    "preview": "npm --prefix frontend run preview -- --host 127.0.0.1",
+    "test:wake": "node scripts/check_wake.mjs",
+    "test:playback": "node scripts/check_playback.mjs",
+    "test:impacts": "node scripts/check_impacts.mjs"
   }
 }

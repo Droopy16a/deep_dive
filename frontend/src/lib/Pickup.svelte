@@ -1,15 +1,15 @@
 <script lang="ts">import type { Item, SceneryItem } from './books'; let { item }: {item: Item | SceneryItem} = $props();</script>
-<svg viewBox="0 0 48 48" width="38" height="38" fill="none" aria-hidden="true">
+<svg viewBox={item === "mine" ? "150 120 780 840" : item === "bubble" ? "120 130 840 820" : item === "treasure" ? "80 190 920 700" : item === "chest" ? "85 115 910 850" : item === "pearl" ? "85 65 910 950" : "0 0 48 48"} width="38" height="38" style="overflow:visible" fill="none" aria-hidden="true">
   {#if item === 'bubble'}
-    <circle cx="24" cy="24" r="19" fill="#a4edff30" stroke="#c5f5ff" stroke-width="2"/><path d="M12 22Q13 12 23 11" stroke="white" stroke-width="3" stroke-linecap="round"/><circle cx="33" cy="34" r="3" fill="#aff1ff80"/>
+    <image href={`${import.meta.env.BASE_URL}assets/air_bubble.png`} width="1080" height="1080"/>
   {:else if item === 'treasure'}
-    <path d="M17 7H31L27 16Q43 25 37 39Q24 47 11 39Q5 25 21 16Z" fill="#dca83c" stroke="#80561b" stroke-width="2"/><path d="M18 16H30" stroke="#ffed99" stroke-width="3"/><circle cx="24" cy="30" r="9" fill="#ffdc75"/><path d="M24 24V36M20 28Q29 23 28 30Q18 32 22 35H28" stroke="#b47a23" stroke-width="2"/>
+    <image href={`${import.meta.env.BASE_URL}assets/treasure.png`} width="1080" height="1080"/>
   {:else if item === 'chest'}
-    <path d="M5 24Q5 9 15 9H34Q43 9 43 24Z" fill="#f1bc40" stroke="#95611d" stroke-width="2"/><rect x="5" y="24" width="38" height="17" rx="3" fill="#bb7925" stroke="#f5ce61" stroke-width="2"/><path d="M13 10V40M35 10V40" stroke="#ffe092" stroke-width="4"/><rect x="20" y="21" width="9" height="11" rx="2" fill="#ffdf76"/><circle cx="24.5" cy="26" r="1.8" fill="#6b4b21"/>
+    <image href={`${import.meta.env.BASE_URL}assets/gold_chest.png`} width="1080" height="1080"/>
   {:else if item === 'pearl'}
-    <circle cx="24" cy="24" r="18" fill="#d4c0ee" stroke="#f5eaff" stroke-width="2"/><ellipse cx="18" cy="17" rx="7" ry="6" fill="#fff9ff"/><path d="M16 36Q31 43 39 26" stroke="#a995c7" stroke-width="3" stroke-linecap="round"/>
+    <image href={`${import.meta.env.BASE_URL}assets/pearl.png`} width="1080" height="1080"/>
   {:else if item === 'mine'}
-    <path d="M24 2V11M24 37V46M2 24H11M37 24H46M8 8L14 14M34 34L40 40M8 40L14 34M34 14L40 8" stroke="#9faebc" stroke-width="5"/><circle cx="24" cy="24" r="15" fill="#283c4d" stroke="#97a5b3" stroke-width="2"/><circle cx="20" cy="20" r="4" fill="#5b7180"/><circle cx="28" cy="28" r="5" fill="#fa7866"/>
+    <image href={`${import.meta.env.BASE_URL}assets/bomb.png`} width="1080" height="1080"/>
   {:else if item === 'fish'}
     <path d="M12 24Q26 5 42 24Q26 43 12 24L3 34V14Z" fill="#77c4ca" stroke="#2d7c93" stroke-width="2"/><path d="M23 15L29 24L23 33" stroke="#4095a8" stroke-width="3"/><circle cx="34" cy="22" r="2" fill="#12354b"/>
   {:else if item === 'shell'}

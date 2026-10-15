@@ -7,3 +7,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Public reference artifact retained locally for REA, excluded from game delivery.
+analysis/aviamasters-reference/

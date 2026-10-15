@@ -1,18 +1,26 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { DisplayAmount, type Balance, type Round, type JurisdictionFlags } from 'stake-engine';
-  import { createSession, type GameSession } from './lib/session';
-  import { readEvents, itemLabels, type DiveStep, type SceneryObject, type Item } from './lib/books';
-  import { flightPosition } from './lib/flight';
+  import type { Balance, Round, JurisdictionFlags } from 'stake-engine';
+  import { GAME_TITLE, formatAmount, launchCurrency, initialBet, loadReplay, sessionError, type ReplayData } from './lib/platform';
+  import { createSession, modeForDepth, type GameSession } from './lib/session';
+  import { readEvents, itemLabels, type DiveStep } from './lib/books';
+  import { sampleFlight, flightDuration } from './lib/flight';
+  import { followCamera } from './lib/camera';
+  import { createPlaybackClock } from './lib/playback';
   import Icon from './lib/Icon.svelte';
   import Ocean from './lib/Ocean.svelte';
+  import type { WakeSample } from './lib/wake';
   import Pickup from './lib/Pickup.svelte';
 
+  const launchParams = new URL(window.location.href).searchParams;
+  const replay = launchParams.get('replay') === 'true';
+  let social = $state(launchParams.get('social') === 'true' || ['XSC', 'XGC', 'XEC'].includes(launchParams.get('currency') ?? ''));
+  let replayData = $state<ReplayData | null>(null);
   let session: GameSession;
   let demo = $state(true), ready = $state(false), busy = $state(false), blocked = $state(false);
-  let balance = $state<Balance>({ amount: 0, currency: 'USD' });
+  let balance = $state<Balance>({ amount: 0, currency: launchCurrency(launchParams) });
   let bet = $state(1_000_000), levels = $state<number[]>([]);
-  let progress = $state(30), distance = $state(0), pitch = $state(0), grounded = $state(false), multiplier = $state(1), lastWin = $state(0);
+  let progress = $state(0), distance = $state(0), pitch = $state(0), grounded = $state(false), multiplier = $state(1), lastWin = $state(0);
   let status = $state('Preparing your dive'), error = $state('');
   let encounter = $state(''), encounterKey = $state(0), lost = $state(false), completed = $state(false);
   let modal = $state<'settings' | 'bet' | 'auto' | 'rules' | null>(null);
@@ -20,20 +28,44 @@
   let autoRemaining = $state(0), autoRunning = false;
   let flags = $state<JurisdictionFlags | null>(null);
   let routeSteps = $state<DiveStep[]>([]);
-  let scenery = $state<SceneryObject[]>([]);
+  let wake = $state<WakeSample[]>([]);
+  const offPathItems = $derived((routeSteps[0]?.scenery ?? []).filter(object =>
+    ['bubble', 'treasure', 'chest', 'pearl', 'mine'].includes(object.item)));
+  type DepthMode = {mode:string;depth:number;landingBonus:number;rtp:number;maxWin:number;winProbability:number};
+  let selectedDepth = $state(100), roundDepth = $state(100);
+  let depthModes = $state<DepthMode[]>([]);
+  const difficulties = [{depth:100,label:'Easy'}, {depth:300,label:'Medium'}, {depth:600,label:'Hard'}];
+  const displayDepth = $derived(busy || completed ? roundDepth : selectedDepth);
+  const selectedMode = $derived(depthModes.find(mode => mode.depth === selectedDepth));
   let disposed = false;
+  let launching = $state(false);
   let audio: AudioContext | null = null;
+  let masterGain: GainNode | null = null;
   const speeds = [ { label: 'Slow', icon: 'turtle', delay: 1100 }, { label: 'Normal', icon: 'walk', delay: 700 },
     { label: 'Fast', icon: 'fast', delay: 350 }, { label: 'Turbo', icon: 'bolt', delay: 160 } ];
-  const subTop = (depth: number) => `calc(${16 + depth * .68}% - var(--sub-width) * ${depth / 100 * 46 / 420})`;
-  const money = (amount: number) => DisplayAmount({ amount, currency: balance.currency });
+  let camera = $state(0);
+  const subTop = (depth: number) => `calc(${(.364 + depth * displayDepth / 100 * .012 - camera) * 100}% - var(--sub-width) * ${depth / 100 * 46 / 420})`;
+  const depthTicks = $derived(Array.from({length: Math.floor(displayDepth / (displayDepth <= 200 ? 25 : 50)) + 1}, (_, i) => {
+    const metres = i * (displayDepth <= 200 ? 25 : 50);
+    return {metres, top: (.364 + metres * .012 - camera) * 100};
+  }).filter(tick => tick.top >= 15 && tick.top <= 86));
+  const money = (amount: number) => formatAmount(amount, balance.currency);
   const speedAllowed = (index: number) => index < 2 || (index === 2 ? !flags?.disabledTurbo : !flags?.disabledSuperTurbo);
-  const canPlay = $derived(ready && !busy && !blocked && balance.amount >= bet);
+  const canPlay = $derived(!replay && ready && !busy && !blocked && balance.amount >= bet);
+  const insufficient = $derived(!replay && ready && !blocked && !busy && balance.amount < bet);
+
+  function toggleSound() {
+    sound = !sound;
+    if (masterGain && audio) masterGain.gain.setValueAtTime(sound ? 1 : 0, audio.currentTime);
+    if (sound) tone();
+  }
 
   function tone(win = false) {
     if (!sound) return;
     try {
       audio ??= new AudioContext();
+      if (!masterGain) { masterGain = audio.createGain(); masterGain.connect(audio.destination); }
+      masterGain.gain.setValueAtTime(1, audio.currentTime);
       void audio.resume();
       const oscillator = audio.createOscillator(), gain = audio.createGain();
       oscillator.type = 'sine';
@@ -41,66 +73,109 @@
       oscillator.frequency.exponentialRampToValueAtTime(win ? 990 : 180, audio.currentTime + .18);
       gain.gain.setValueAtTime(.045, audio.currentTime);
       gain.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .2);
-      oscillator.connect(gain); gain.connect(audio.destination);
+      oscillator.connect(gain); gain.connect(masterGain);
       oscillator.start(); oscillator.stop(audio.currentTime + .21);
     } catch { /* Sound is optional; unsupported audio cannot interrupt settlement. */ }
   }
-  function moveTo(target: DiveStep, duration: number, bounce: boolean, mineDive: boolean) {
-    const from = {depth: progress, distance}, start = performance.now();
-    duration *= Math.max(.9, Math.min(1.9, (target.distance - distance) / 44));
+  function playRoute(steps: DiveStep[]) {
+    const duration = flightDuration(steps);
+    const clock = createPlaybackClock(duration, speed);
+    const started = performance.now();
+    let previousTime = started, nextEvent = 0;
+    const timings: number[] = [];
+    const history: WakeSample[] = [];
     return new Promise<void>((resolve, reject) => {
       function frame(now: number) {
         if (disposed) { reject(new Error('Playback interrupted')); return; }
-        const t = Math.max(0, Math.min(1, (now - start) / duration));
-        const position = flightPosition(from, target, t, bounce, mineDive);
-        progress = position.depth; distance = position.distance; pitch = position.pitch;
-        if (t === 1) resolve(); else requestAnimationFrame(frame);
+        const clockFrame = clock.advance(Math.max(0, now - previousTime), speed);
+        const elapsed = clockFrame.end;
+        const position = sampleFlight(steps, elapsed, duration);
+        progress = position.depth; distance = position.distance;
+        camera = followCamera(camera, progress, roundDepth, now - previousTime);
+        if (import.meta.env.DEV && now > previousTime) timings.push(now - previousTime);
+        pitch += (position.pitch - pitch) * (1 - Math.exp(-(now - previousTime) / 90));
+        // Fill missed samples when a background tab throttles animation frames.
+        // This keeps the curved wake intact rather than reducing it to a dot.
+        for (let time = Math.max(previousTime, now - 1400) + 33; time < now - 16; time += 33) {
+          const previous = sampleFlight(steps, clockFrame.at(time - previousTime), duration);
+          history.push({distance: previous.distance, depth: previous.depth, pitch: previous.pitch, time});
+        }
+        previousTime = now;
+        history.push({distance, depth: progress, pitch, time: now});
+        while (history.length && (history.length > 128 || history[0].distance < distance - 100 || history[0].time < now - 1400)) history.shift();
+        wake = [...history];
+        while (nextEvent < steps.length && steps[nextEvent].distance <= distance + 1e-7) {
+          const event = steps[nextEvent++];
+          multiplier = event.multiplier / 100;
+          encounter = itemLabels[event.item]; encounterKey++;
+          status = event.item === 'mine' ? 'Mine hit · value halved' : itemLabels[event.item];
+          if (['bubble','treasure','chest','pearl'].includes(event.item)) tone(true);
+          if (event.item === 'mine') tone(false);
+        }
+        if (elapsed >= duration) {
+          const end = steps.at(-1)!;
+          progress = end.depth; grounded = end.item === 'ground'; pitch = grounded ? 0 : position.pitch;
+          if (import.meta.env.DEV && timings.length) {
+            const sorted = [...timings].sort((a,b) => a-b);
+            console.debug('Trenchbound Relay motion', JSON.stringify({frames: timings.length,
+              durationMs: Math.round(now - started), p95FrameMs: Math.round(sorted[Math.floor(sorted.length * .95)] * 10) / 10,
+              contacts: nextEvent, expectedContacts: steps.length}));
+          }
+          resolve();
+        }
+        else requestAnimationFrame(frame);
       }
       requestAnimationFrame(frame);
     });
   }
   async function present(current: Round) {
-    progress = 30; distance = 0; pitch = 0; grounded = false; multiplier = 1; lost = false; completed = false; lastWin = 0;
+    camera = 0; progress = 0; distance = 0; pitch = 0; grounded = false; multiplier = 1; lost = false; completed = false; lastWin = 0;
+    wake = [];
     const events = readEvents(current.state);
+    const target = (events[0] as DiveStep).targetDepth!;
+    if (current.mode && current.mode !== modeForDepth(target)) throw new Error('Server mode does not match the route depth');
+    roundDepth = target; selectedDepth = target;
     routeSteps = events.filter((event): event is DiveStep => event.type === 'diveStep');
-    scenery = routeSteps[0]?.scenery ?? [];
-    let bounce = false;
-    let mineDive = false;
-    for (const event of events) {
-      if (event.type === 'diveStep') {
-        if (event.item !== 'launch') await moveTo(event, speeds[speed].delay, bounce, mineDive);
-        multiplier = event.multiplier / 100;
-        encounter = itemLabels[event.item];
-        encounterKey += 1;
-        status = event.item === 'mine' ? 'Mine hit · value halved' : itemLabels[event.item];
-        bounce = ['bubble', 'treasure', 'chest', 'pearl'].includes(event.item);
-        mineDive = event.item === 'mine';
-        if (bounce) tone(true);
-        if (mineDive) { pitch = 28; tone(false); }
-        if (event.item === 'ground') {
-          grounded = true; pitch = 0; lost = multiplier === 0;
-        }
-      } else { multiplier = event.amount / 100; }
-    }
-    if (!grounded) throw new Error('Route ended before seabed contact');
-    if (current.active) { balance = (await session.endRound()).balance; current.active = false; }
+    await playRoute(routeSteps);
+    multiplier = events.at(-1)!.type === 'finalWin' ? (events.at(-1) as {amount:number}).amount / 100 : multiplier;
+    lost = multiplier === 0;
+    if (!grounded && multiplier !== 0) throw new Error('A positive payout must reach the seabed');
+    if (!replay && current.active) { balance = (await session.endRound()).balance; current.active = false; }
     lastWin = current.payout ?? Math.round((current.amount ?? bet) * multiplier);
     encounter = ''; completed = true;
-    status = multiplier > 0 ? 'TREASURE RECOVERED' : 'DIVE COMPLETE';
-    tone(multiplier > 0);
+    status = multiplier > 1 ? 'TREASURE RECOVERED' : multiplier === 1 ? 'AMOUNT RETURNED' : 'DIVE COMPLETE';
+    tone(multiplier > 1);
   }
   async function dive() {
     if (!canPlay) return;
     busy = true; error = ''; modal = null; completed = false;
     try {
       tone();
-      const result = await session.play(bet);
+      const result = await session.play(bet, selectedDepth);
       balance = result.balance;
-      await present(result.round);
+      launching = true;
+      await new Promise(resolve => setTimeout(resolve, 160));
+      const playback = present(result.round);
+      requestAnimationFrame(() => { launching = false; });
+      await playback;
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : 'Unable to finish round';
+      error = sessionError(cause);
       blocked = true; autoRemaining = 0;
     } finally { busy = false; }
+  }
+  async function watchReplay() {
+    if (!replayData || !ready || busy || blocked) return;
+    busy = true; modal = null; error = '';
+    try { await present(replayData.round); }
+    catch { error = 'Unable to show this replay. Reconnect to try again.'; blocked = true; }
+    finally { busy = false; }
+  }
+  function spacebar(event: KeyboardEvent) {
+    if (event.code !== 'Space' || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target as HTMLElement;
+    if (target.matches('input, select, textarea, button, [contenteditable="true"]') || modal) return;
+    event.preventDefault();
+    if (!event.repeat && !replay && !autoRunning && !flags?.disabledSpacebar && canPlay) void dive();
   }
   async function startAuto(count: number) {
     if (!canPlay || flags?.disabledAutoplay || autoRunning) return;
@@ -112,8 +187,16 @@
     }
     autoRemaining = 0; autoRunning = false;
   }
+  function changeDifficulty(depth: number) {
+    if (replay || busy || autoRemaining) return;
+    selectedDepth = depth;
+    // A finished dive belongs to the old target; show the new ocean from launch.
+    completed = false; camera = 0; progress = 0; distance = 0; pitch = 0;
+    grounded = false; lost = false; multiplier = 1; lastWin = 0;
+    wake = []; routeSteps = []; encounter = ''; status = 'Ready to dive';
+  }
   function changeBet(direction: number) {
-    if (busy || autoRemaining || !levels.length) return;
+    if (replay || busy || autoRemaining || !levels.length) return;
     const index = levels.indexOf(bet);
     bet = levels[Math.max(0, Math.min(levels.length - 1, index + direction))];
   }
@@ -133,60 +216,93 @@
   onMount(() => {
     void (async () => {
       try {
+        const response = await fetch(`${import.meta.env.BASE_URL}math-model.json`);
+        if (!response.ok) throw new Error('Depth configuration missing');
+        const model = await response.json();
+        if (!Array.isArray(model.modes) || model.modes.length !== difficulties.length || !difficulties.every(difficulty =>
+          model.modes.some((mode: DepthMode) => mode.depth === difficulty.depth &&
+            mode.mode === modeForDepth(mode.depth) && mode.landingBonus === mode.depth / 100 &&
+            mode.winProbability > 0 && mode.winProbability <= 1 && mode.maxWin > 0))) throw new Error('Upload the matching difficulty-mode frontend and math');
+        depthModes = model.modes;
+        document.documentElement.lang = 'en';
+        if (replay) {
+          demo = false;
+          replayData = await loadReplay(window.location.href);
+          balance = { amount: 0, currency: replayData.currency }; bet = replayData.amount;
+          const events = readEvents(replayData.round.state);
+          selectedDepth = roundDepth = (events[0] as DiveStep).targetDepth!;
+          if (replayData.round.mode !== modeForDepth(selectedDepth) || events.at(-1)!.type !== 'finalWin' || (events.at(-1) as {amount:number}).amount / 100 !== replayData.round.payoutMultiplier) throw new Error('Replay route mismatch');
+          ready = true; status = 'Ready to watch'; return;
+        }
         session = await createSession(window.location.href); demo = session.demo;
         const auth = await session.authenticate();
-        balance = auth.balance; levels = auth.config.betLevels; flags = auth.jurisdictionFlags;
-        bet = levels.includes(auth.config.defaultBetLevel) ? auth.config.defaultBetLevel : levels[0];
-        if (!Number.isSafeInteger(bet)) throw new Error('No valid bet levels supplied');
+        flags = auth.jurisdictionFlags; social = social || !!flags.socialCasino;
+        if (social && !['XSC', 'XGC', 'XEC'].includes(auth.balance.currency)) throw new Error('Social session token mismatch');
+        balance = auth.balance; levels = auth.config.betLevels;
+        bet = initialBet(auth.config, auth.round);
         if (flags.minimumRoundDuration > 0) throw new Error('This prototype requires minimumRoundDuration = 0');
         if (auth.round?.active) { busy = true; await present(auth.round); }
         ready = true; if (!completed) status = 'Ready to dive';
-      } catch (cause) { error = cause instanceof Error ? cause.message : 'Unable to start session'; blocked = true; }
+      } catch (cause) { error = replay ? 'Unable to load this replay. Check the link and reconnect to try again.' : sessionError(cause); blocked = true; }
       finally { busy = false; }
     })();
   });
   onDestroy(() => { disposed = true; autoRemaining = 0; void audio?.close(); });
 </script>
 
-<main class="game" class:playing={busy} style={`--play-scale:${playSize};--play-opacity:${playOpacity}`}>
-  <Ocean {progress} {distance} {pitch} {grounded} {busy} {lost}/>
+<svelte:head><title>{GAME_TITLE} · CZN Studios{replay ? ' · Replay' : ''}</title></svelte:head>
+<svelte:window onkeydown={spacebar}/>
+
+<main class="game" class:playing={busy} class:launching={launching} style={`--play-scale:${playSize};--play-opacity:${playOpacity}`}>
+  <Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake}/>
   <header class="topbar">
-    <div class="studio"><span class="studio-mark">CZN</span><span>DEEP DIVE<small>{demo ? 'FUN PLAY · DEMO' : 'CZN STUDIOS'}</small></span></div>
-    <div class="wordmark" aria-hidden="true"><span>DEEP</span><strong>DIVE</strong><i>✦</i></div>
+    <div class="studio"><span class="studio-mark">CZN</span><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : demo ? 'FUN PLAY · DEMO' : 'CZN STUDIOS'}</small></span></div>
+    <div class="wordmark" aria-hidden="true"><span>TRENCHBOUND</span><strong>RELAY</strong><i>✦</i></div>
     <div class="top-actions">
-      <button class="icon-button" onclick={() => { sound = !sound; if (sound) tone(); }} aria-label={sound ? 'Mute sound' : 'Enable sound'} aria-pressed={sound}><Icon name={sound ? 'sound' : 'mute'} size={21}/></button>
+      <button class="icon-button" onclick={toggleSound} aria-label={sound ? 'Mute sound' : 'Enable sound'} aria-pressed={sound}><Icon name={sound ? 'sound' : 'mute'} size={21}/></button>
       <button class="icon-button" onclick={() => modal = 'settings'} aria-label="Open settings"><Icon name="menu" size={21}/></button>
     </div>
   </header>
-  <div class="session-label">{demo ? 'DEMO CREDITS · NO REAL MONEY' : 'RGS SESSION'}</div>
+  <div class="session-label">{replay ? 'RECORDED ROUND · VIEW ONLY' : demo ? (social ? 'DEMO · SIMULATED COINS' : 'DEMO · SIMULATED BALANCE') : 'RGS SESSION'}</div>
+  {#if ready || busy}
   {#if !busy && !completed}<div class="intro"><span>THE OCEAN IS FULL OF SURPRISES</span><h1>Go deeper.</h1><p>Collect treasure. Watch for mines.<br/>Explore the depths.</p></div>{/if}
   {#if busy}<div class="live-multiplier"><small>COLLECTED</small>{multiplier.toFixed(2)}<span>×</span></div>{/if}
   <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(bet)}</div>
-  {#if busy || completed}{#each scenery as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110}<div class="route-token field-item" class:background-scenery={["fish","shell","bottle"].includes(object.item)} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span>{#if ['bubble','treasure','chest','pearl','mine'].includes(object.item)}<strong>{itemLabels[object.item as Item]}</strong>{/if}</div>{/if}{/each}{/if}
-  {#if busy}{#each routeSteps as step}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span><strong>{itemLabels[step.item]}</strong></div>{/if}{/each}{/if}
+  {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
+  {#if busy}{#each routeSteps as step (step.index)}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span></div>{/if}{/each}{/if}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
   {#if completed && !busy}<div class="result" class:empty={multiplier === 0} role="status"><small>{status}</small><strong>{multiplier > 0 ? money(lastWin) : 'No treasure this time'}</strong><span>{multiplier.toFixed(2)}×</span></div>{/if}
-  <div class="depth-scale" aria-hidden="true"><span>0m</span><i></i><span>50m</span><i></i><span>100m</span></div>
+  <div class="world-depth-scale" aria-hidden="true">{#each depthTicks as tick}<span style={`top:${tick.top}%`}>{tick.metres}m ─</span>{/each}</div>
   <div class="bottom-shade"></div>
   <footer class="controls">
     <div class="control-row">
-      <div class="telemetry"><div><small>DEPTH</small><strong>{progress.toFixed(1)}<span>m</span></strong></div><div><small>DISTANCE</small><strong>{distance.toFixed(1)}<span>m</span></strong></div><div><small>MULTIPLIER</small><strong>×{multiplier.toFixed(2)}</strong></div></div>
-      <div class="speeds" aria-label="Animation speed">{#each speeds as option, index}<button class:active={speed === index} disabled={busy || !speedAllowed(index)} onclick={() => speed = index} aria-label={`${option.label} speed`} aria-pressed={speed === index} title={option.label}><Icon name={option.icon} size={23}/></button>{/each}</div>
+      <div class="telemetry"><div><small>DEPTH</small><strong>{(progress * displayDepth / 100).toFixed(1)}<span>m</span></strong></div><div><small>DISTANCE</small><strong>{distance.toFixed(1)}<span>m</span></strong></div><div><small>MULTIPLIER</small><strong>×{multiplier.toFixed(2)}</strong></div></div>
+      <div class="speeds" aria-label="Animation speed">{#each speeds as option, index}<button class:active={speed === index} disabled={!speedAllowed(index)} onclick={() => speed = index} aria-label={`${option.label} speed`} aria-pressed={speed === index} title={option.label}><Icon name={option.icon} size={23}/></button>{/each}</div>
     </div>
-    <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><small>TOTAL BET</small><strong>{money(bet)}</strong></button><div class="bet-arrows"><button aria-label="Increase bet" onclick={() => changeBet(1)} disabled={busy || !!autoRemaining || bet === levels.at(-1)}>▴</button><button aria-label="Decrease bet" onclick={() => changeBet(-1)} disabled={busy || !!autoRemaining || bet === levels[0]}>▾</button></div></div></div>
-    <p class="game-status" aria-live="polite">{error || (autoRemaining ? `Autoplay · ${autoRemaining} dives remaining` : !ready ? status : '')}</p>
+    {#if replay}
+      <div class="replay-details"><strong>{replayData?.modeLabel} · Replay</strong><span>Play amount: {money(bet)}</span><span>Cost multiplier: {replayData?.costMultiplier}× · {social ? 'Total play' : 'Round cost'}: {money(bet * (replayData?.costMultiplier ?? 1))}</span></div>
+    {:else}
+      <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="depth-bet-controls"><label class="depth-control"><small>DIFFICULTY</small><select aria-label="Difficulty" value={selectedDepth} onchange={(event) => changeDifficulty(Number(event.currentTarget.value))} disabled={busy || !!autoRemaining || !ready}>{#each difficulties as difficulty}<option value={difficulty.depth}>{difficulty.label}</option>{/each}</select></label><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><small>TOTAL PLAY</small><strong>{money(bet)}</strong></button><div class="bet-arrows"><button aria-label="Increase play amount" onclick={() => changeBet(1)} disabled={busy || !!autoRemaining || bet === levels.at(-1)}><Icon name="chevron-up" size={14}/></button><button aria-label="Decrease play amount" onclick={() => changeBet(-1)} disabled={busy || !!autoRemaining || bet === levels[0]}><Icon name="chevron-down" size={14}/></button></div></div></div></div>
+    {/if}
+    <p class="depth-odds">{selectedMode ? `${selectedDepth} m seabed · ${(selectedMode.winProbability * 100).toFixed(1)}% landing chance · ×${selectedMode.landingBonus} landing bonus` : "Preparing depths"}</p>
+    <p class="game-status" aria-live="polite" id="play-explanation">{error || (insufficient ? 'Your balance is too low for this play amount.' : autoRemaining ? `Autoplay · ${autoRemaining} dives remaining` : '')}</p>
   </footer>
   <div class="play-cluster">
+    {#if replay}
+      <button class="replay-button" disabled={busy || blocked || !ready} onclick={watchReplay}>{busy ? 'Playing…' : completed ? 'Play again' : 'Start replay'}</button>
+    {:else}
     <button class="auto-button" class:active={autoRemaining > 0} aria-label={autoRemaining ? 'Stop autoplay after this round' : 'Open autoplay'} title={autoRemaining ? 'Stop after this dive' : 'Autoplay'} disabled={!ready || blocked || (!!flags?.disabledAutoplay && !autoRemaining)} onclick={() => { if (autoRemaining) autoRemaining = 0; else if (!busy) modal = 'auto'; }}><Icon name="auto" size={24}/></button>
-    <button class="play-button" class:spinning={busy} aria-label={busy ? 'Dive in progress' : 'Start dive'} disabled={!canPlay || !!autoRemaining} onclick={dive}><Icon name={busy ? 'auto' : 'play'} size={48}/></button>
+    <button class="play-button" class:spinning={busy} aria-label={busy ? 'Dive in progress' : 'Start dive'} aria-describedby="play-explanation" disabled={!canPlay || !!autoRemaining} onclick={() => dive()}><Icon name={busy ? 'auto' : 'play'} size={48}/></button>
+    {/if}
   </div>
+  {:else if !error}<p class="loading" role="status">{replay ? 'Loading recorded round…' : 'Connecting to your dive…'}</p>{/if}
   {#if error}<div class="connection-error" role="alert">{error}<button onclick={() => window.location.reload()}>Reconnect</button></div>{/if}
   {#if modal}
     <div class="modal-shade"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1" use:focusDialog onkeydown={(event) => { if (event.key === 'Escape') modal = null; }}>
       <button class="icon-button modal-close" aria-label="Close dialog" onclick={() => modal = null}><Icon name="close"/></button>
-      <h2 id="dialog-title">{modal === 'settings' ? 'SETTINGS' : modal === 'bet' ? 'TOTAL BET' : modal === 'auto' ? 'AUTOPLAY' : 'HOW TO PLAY'}</h2>
+      <h2 id="dialog-title">{modal === 'settings' ? 'SETTINGS' : modal === 'bet' ? 'TOTAL PLAY' : modal === 'auto' ? 'AUTOPLAY' : 'HOW TO PLAY'}</h2>
       {#if modal === 'settings'}
-        <label class="setting-toggle">Sound effects<button class="toggle" class:enabled={sound} aria-label="Toggle sound effects" aria-pressed={sound} onclick={() => { sound = !sound; if (sound) tone(); }}>{sound ? 'ON' : 'OFF'}</button></label>
+        <label class="setting-toggle">Sound effects<button class="toggle" class:enabled={sound} aria-label="Toggle sound effects" aria-pressed={sound} onclick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></label>
         <label class="slider">Play button size<input type="range" min="0.8" max="1.15" step="0.05" bind:value={playSize}/></label>
         <label class="slider">Play button opacity<input type="range" min="0.45" max="1" step="0.05" bind:value={playOpacity}/></label>
         <button class="outline-button" onclick={() => { playSize = 1; playOpacity = 1; }}>Reset play button</button>
@@ -196,7 +312,24 @@
       {:else if modal === 'auto'}
         <p>Choose a number of dives. Stop autoplay at any time; the current dive will finish.</p><div class="bet-grid">{#each [10, 25, 50] as count}<button disabled={!canPlay || !!flags?.disabledAutoplay} onclick={() => startAuto(count)}>{count} dives</button>{/each}</div>
       {:else}
-        <p>Collect air bubbles (+1), treasure (+3), gold chests (×2) and pearls (×3). Each collectible bounces the submarine upward. Mines halve the multiplier and send it deeper. The round finishes only when the submarine touches the seabed, on every route.</p><p>Start at 1×. Mine halves round down to 0.01×; enough mines reduce the value to zero. Payouts use a logarithmic curve with fractional multipliers, a 97% theoretical return and a 250× maximum. This is an independent Deep Dive model. Outcomes are chosen before their routes are built. Speed changes animation only.</p><p>{demo ? 'Fun play uses demo credits only. Reload resets your balance.' : 'Results and balance are supplied by the game server.'}</p>
+        <h3>Round rules</h3>
+        <p>Start with a collected multiplier of 1×. Air bubbles add 1, treasure adds 3, gold chests multiply by 2 and pearls multiply by 3. These effects apply in encounter order. Mines divide the current value by 2, rounded down to 0.01×. Collectibles lift the submarine; mines send it deeper. Decorative objects away from the route do not change the result.</p>
+        <p>Choose Easy, Medium or Hard before starting. Reach the chosen seabed with value remaining to win. The landing bonus multiplies the collected value. The final win equals the play amount multiplied by the final multiplier. Positive returns may be smaller than the play amount. A mine that reduces the value to zero ends the round with no win. Within 12 m of the bottom, the submarine continues to the seabed at zero; otherwise it stops at that mine. No further collectibles apply after zero. There are no free games or retriggers. Outcomes are determined by the game server; speed and other controls change presentation only.</p>
+        <h3>Modes and symbol wins</h3>
+        <p>All modes use the same symbol effects above and can be played for 1× the selected play amount per round. Higher difficulty means a deeper seabed, fewer successful landings and a larger landing bonus and maximum win.</p>
+        <table class="rules-table"><caption>RTP and maximum win by mode</caption><thead><tr><th>Mode / depth</th><th>Per round</th><th>Landing bonus</th><th>RTP</th><th>Max win</th></tr></thead><tbody>{#each depthModes as mode}<tr><th>{difficulties.find(difficulty => difficulty.depth === mode.depth)?.label} / {mode.depth} m</th><td>1×</td><td>{mode.landingBonus}×</td><td>{(mode.rtp * 100).toFixed(1)}%</td><td>{mode.maxWin}×</td></tr>{/each}</tbody></table>
+        <p>Maximum wins are multiples of the selected play amount, including the landing bonus. Landing chances are Easy 50%, Medium approximately 16.67%, and Hard approximately 8.33%. Landing chance means any positive return, including a return smaller than the play amount. RTP is the theoretical long-run gross return, not the expected result of an individual session.</p>
+        <h3>Controls</h3>
+        {#if replay}
+          <p>Start replay watches the recorded round. Play again restarts that same round after it finishes. The mode, original play amount, cost multiplier and total play are shown below the ocean. Replay is view only; no new plays can be placed. Reconnect reloads this same recording if a connection error occurs.</p>
+        {:else}
+          <p>Start dive begins one round at the displayed total play. Space also starts one round when no menu is open and this shortcut is available in your region. Total play opens the server's allowed amounts; the up/down arrows move one level and stop at the ends. Difficulty selects Easy, Medium or Hard. Amount and difficulty lock while a round or autoplay is running.</p>
+          <p>Autoplay opens a confirmation menu. Choose 10, 25 or 50 dives to start. Press its stop control to finish the current round and cancel the remaining dives. Autoplay stops if the balance is too low or a connection error occurs. It may be unavailable in some regions. The balance shows the available amount; the result shows the last round's gross win and multiplier.</p>
+        {/if}
+        <p>Slow, Normal, Fast and Turbo change animation speed, including during playback. Faster options may be unavailable in some regions. The speaker mutes or enables every sound; the same control is in Settings. The menu opens Settings; How to play opens these rules. Play button size and opacity adjust the main control; Reset play button restores both defaults. Close dismisses any panel; Escape also closes it. Reconnect reloads the game and recovers any unfinished live round. There is no fullscreen or feature activation control.</p>
+        <h3>General information</h3>
+        <p>{demo ? 'Fun play uses a simulated balance only. Reload resets it.' : replay ? 'This is a recording of a server result. It does not change your balance.' : 'Results and balance are supplied by the game server.'}</p>
+        <p>Malfunction voids all wins and plays. A consistent internet connection is required. In the event of a disconnection, reload the game to finish any uncompleted rounds. The expected return is calculated over many plays. The game display does not represent a physical device and is for illustrative purposes only. Wins are settled according to the amount received from the Remote Game Server, rather than events within the web browser. TM and © 2026 Engine. Trenchbound Relay by CZN Studios.</p>
       {/if}
     </div></div>
   {/if}

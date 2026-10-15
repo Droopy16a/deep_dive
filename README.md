@@ -1,19 +1,19 @@
-# Deep Dive — CZN Studios
+# Trenchbound Relay — CZN Studios
 
-Version 0.3: a payout-first, side-scrolling submarine prototype using Svelte 5/TypeScript/Vite, the official Stake Engine TypeScript client and Python Math SDK. Official documentation/source review is recorded in [docs/stake-engine-notes.md](docs/stake-engine-notes.md).
+Svelte 5 / TypeScript / Vite frontend, official pinned Stake Engine client, and Python Math SDK. The selector offers Easy (100 m), Medium (300 m) and Hard (600 m), with an immediate loss at zero and a bonus for reaching the selected seabed. The model is independently designed; it is not BGaming's undisclosed exact math.
 
-## Run
+## Run locally
 
-Dependencies are already installed on this computer. In PowerShell:
+Dependencies are installed on this computer:
 
 ```powershell
 cd "$env:USERPROFILE\Desktop\czn-deep-dive"
 npm.cmd run dev
 ```
 
-Open the printed local URL (normally http://127.0.0.1:5173/). Without RGS launch parameters, the game runs in clearly marked fun play with 100 demo credits. Reload resets the demo. A preview server may already be running on port 5173.
+Open the printed address, normally http://127.0.0.1:5173/. Without RGS parameters the game uses 100 demo credits; reload resets them. Demo books for the chosen depth load on demand.
 
-For a fresh checkout, install Git, Node 22.19+ and Python 3.12, then:
+For a fresh checkout, install Git, Node 22.19+ and Python 3.12:
 
 ```powershell
 npm.cmd --prefix frontend ci
@@ -22,104 +22,80 @@ py -3.12 scripts/setup_math.py
 npm.cmd run dev
 ```
 
-The machine's plain `python` command points to 3.10; use `py -3.12`. No environment activation or global Python package install is needed. On macOS/Linux, substitute `python3.12`, `.stake/venv/bin/python`, and `npm`. Rust/Cargo is needed only when adding the optional official optimizer; this starter does not optimize.
+The machine's plain python is 3.10; use the pinned virtual environment. On macOS/Linux use python3.12, .stake/venv/bin/python and npm. Rust is needed only for the optional optimizer, which this prototype does not use.
 
-## Mechanics and payout-first routes
+## Depth betting
 
-A round starts at **1×**. The camera tracks horizontally; the ocean's foreground, rocks and light layers scroll at different speeds. Encounter positions are part of the math event book.
+Select Easy (100 m), Medium (300 m) or Hard (600 m) beside the bet amount before starting a round. Only these three depths are generated and accepted by the game. Bet and target depth lock during a round and autoplay; animation speed can change during playback. Each depth is a distinct RGS bet mode at cost 1× stake.
 
-| Encounter | Value effect | Movement |
-| --- | --- | --- |
-| Air bubble | +1× | Bounce upward |
-| Treasure | +3× | Bounce upward |
-| Gold chest | ×2 | Bounce upward |
-| Pearl | ×3 | Bounce upward |
-| Naval mine | ÷2 | Dive downward |
-| Seabed | Final value | Finish on ground contact |
+| Target | Landing chance | Landing bonus | Maximum payout | RTP |
+| --- | ---: | ---: | ---: | ---: |
+| 100 m | 50.00% | ×1 | 250× | 96.4% |
+| 300 m | 16.67% | ×3 | 750× | 96.4% |
+| 600 m | 8.33% | ×6 | 1500× | 96.4% |
 
-Values use integer hundredths: 100 means 1×. Each mine halves the current value and **rounds down to 0.01×**. For example, 1.87× becomes 0.93×; 0.01× becomes 0×. This makes zero reachable through actual mine effects, with no hidden final override.
+Landing chance means probability of any positive return, not profit. Some landings return less than the stake. Greater depth reduces landing probability and increases both the landing bonus and potential payout. Expected gross return stays 96.4% of stake in every mode; short sessions need not resemble RTP. At 600 m the cap is 1,500×, compared with 250× at 100 m.
 
-The math module selects a payout from the configured catalogue **before generating its route**. It creates a varied rewarding opening, then searches for an exact sequence of encounters. A zero target gets a mine-heavy ending until value naturally reaches zero. The final route point is ground contact (depth 100); all routes land directly on the seabed. No earlier point reaches the seabed. Motion between positive contacts contains an upward arc; mine hits cause descent. Settlement and the final result wait for the ground-contact animation to complete.
+The generator derives deeper modes by multiplying zero-outcome weight and scaling positive payouts by the depth factor. Positive route shapes remain independent variants. All integer lookup weights are validated using exact rational arithmetic. Changing depth does not influence an already-started result.
 
-The frontend never chooses live payouts or rewrites server events. Stake Engine selects one precomputed book before playback. In local demo, a book is chosen before its animation starts. The word “payout-first” describes the math generation order, not client-side live game math.
+## Round rules
 
-## Logarithmic payout distribution — 97% RTP / 250× maximum
+Start at the surface with 1× collected value. Air bubble +1, treasure +3, gold chest ×2, pearl ×3, bomb ÷2. Mine halving rounds down to 0.01×. If a bomb takes the collected value to zero in open water, the round stops at that collision and returns zero. If the zeroing bomb is within 12 real metres of the seabed, the downward motion continues to an explicit zero-value ground contact. No pickups occur after zero, and landing cannot turn a loss into a win.
 
-Deep Dive uses an independent model, not BGaming’s undisclosed exact probabilities. The regular positive payout curve is `m(u) = -s × ln(1-u)`, evaluated at 96 evenly spaced probability quantiles. The scale `s` is calibrated to the target return; payouts are quantized to 0.01×. Probability mass is split between adjacent cents to remove the rounding error exactly. This creates fractional payouts instead of a handful of fixed integer tiers. The formula governs outcome selection, not a continuously rising on-screen counter: pickups still apply their exact +1/+3/×2/×3/÷2 effects.
+A positive outcome must reach the chosen seabed with value remaining. Only then is the depth bonus applied to the collected multiplier: ×1 at 100 m through ×10 at 1,000 m. Ground contact and its bonus are explicit validated events, followed by the final payout. The frontend cannot change live outcomes.
 
-Zero outcomes retain 50% probability. A separate rare 250× outcome retains weight 1 out of 100,000. Remaining probability follows the logarithmic quantiles. Total weighted gross return is exactly 97% (3% house edge). These probabilities and the logarithmic model are Deep Dive design choices; no claim of matching Aviamasters’ hit rate/volatility is made. This remains prototype math.
+Payout is selected before the exact route is generated. The regular raw positive multipliers follow the existing logarithmic quantile model, plus an explicit rare cap. Paths mix random encounters, short/medium/long gaps and short bomb clusters. Opaque off-path props use the same supplied assets and circular glows but never affect payout; they remain clear of the swept submarine hull using an 7.2 m physical margin, rather than a depth-scaled empty corridor.
 
-Tune `config/game.json`: `distribution.quantiles` controls positive payout resolution; `totalWeight`, `zeroWeight`, `zeroBooks`, and `maxWinWeight` control the explicit masses and route variety. `prototypeRtp` and `maxWin` remain 0.97 and 250. The generator rejects impossible parameters, calibrates exact integer weights, and exports the complete generated table in `frontend/public/math-model.json`. Regenerate, check, build and upload both packages after changes. It also still supports an explicit `outcomes` table if the `distribution` object is removed.
+Depth changes the world: every metre has the same vertical scale, so a 1,000 m seabed is ten times farther below the surface than a 100 m seabed. The submarine starts at its original screen height. A damped camera with a viewing window follows it downward and stops near the floor for the final approach; scenery, depth ticks, pickups and the historical wake share that camera offset.
 
-Live RGS selects using the lookup CSV’s middle column. Fun play uses the same weights with unbiased rejection sampling. SDK simulation progress shows the unweighted route-catalogue average, not the final weighted RTP. We apply weights before SDK config/hash generation. Collected value can exceed the final payout before mines; the cap applies to final payout.
+Flight uses a deterministic gravity-and-water-drag simulation with item-specific velocity impulses. Pickups always reverse vertical motion upward; bombs always send it downward. Contact spacing leaves time for a pickup rise to crest and begin falling before the next hit, with at least 4% of scene height of visible lift. The vertical world scale is 1.2% of scene height per metre. The simulator discovers contact depths from the current position and momentum; the frontend never steers toward the next item or flattens the trajectory there. Books store physical contact times, outgoing velocities and one constant forward speed. A globally chosen speed is retried if the encounter schedule would hit the floor too soon. A constant replay time scale caps visual forward speed at 350 scene units per second before the player speed setting, so dense Easy books cannot rush past in two seconds. Positive routes finish with an unpowered descent until the simulated hull reaches the bottom. Both languages verify the same equations and impacts.
 
-## Variable journeys and seabed finish
+The payout-first contract remains: the weighted outcome selects a valid encounter sequence, then physics builds its presentation. Physics does not replace the published RGS payout distribution. Upload the new frontend and math together; old books do not carry the required physics state.
 
-Every route starts with the four positive pickup types in shuffled order, then adds zero to three extra positive encounters and zero to four exact-value chest/mine detours. The exact target route is solved afterwards. Each journey chooses its own spacing range (minimum 52 metres), with a random 60–150 metre final approach. Extra encounters and wider gaps make duration and length vary even for the same payout. All geometry is stored in the event book so replay/reconnect remains deterministic.
+Flight uses one continuous animation clock with smooth live speed changes. The water wake follows recent world positions and bends through climbs and dives. Slow/Normal/Fast/Turbo duration factors are 2.25/1.35/0.65/0.24. Reduced-motion preferences disable decorative animation.
 
-Every route ends with `ground` at depth 100, regardless of payout. The wreck graphic and wreck event have been removed. The submarine lands directly on the seabed and settles only after ground contact. Positive pickups still bounce upward; mines tilt and bounce downward. Decorative pickups remain clear of the swept submarine path.
-
-## Verify, build and upload
+## Build, verify and upload
 
 ```powershell
 .\.stake\venv\Scripts\python.exe scripts/run_math.py
+npm.cmd run test:impacts
 npm.cmd run test:routes
 npm.cmd run test:rgs
+npm.cmd run test:platform
+npm.cmd run test:playback
+npm.cmd run test:wake
 npm.cmd run check
 npm.cmd run build
 ```
 
-The math runner verifies payout-table/book IDs, weights, every arithmetic transition, final win, event order, ground termination and RTP. The frontend route check cross-validates all generated Python books, bounce arcs, natural zero outcomes and absence of premature ground contact. The RGS check uses the actual pinned client with mocked responses; it places no external bets.
+Upload the current frontend and math together: older one-mode math does not support depth selection or the current zero-loss endings.
 
-**Version 0.2 requires replacing both frontend and math together.** Older v0.1 event books lack distance and do not match the new mechanics.
+- Frontend: contents of frontend/dist/ directly at the upload root.
+- Math: index.json and every referenced books_*.jsonl.zst / lookUpTable_*_0.csv from math/games/deep_dive/library/publish_files/, directly at the upload root (7 files for three modes).
+- The supplied upload ZIPs contain root files, with no source code, Python SDK or node_modules. Extract/select their contents if Studio requires individual files.
 
-- Frontend: upload the contents of `frontend/dist/` (index.html, assets and fixtures) at the upload root.
-- Math: upload only `index.json`, `books_base.jsonl.zst` and `lookUpTable_base_0.csv` from `math/games/deep_dive/library/publish_files/`, at the upload root.
-- Both supplied upload ZIPs contain their files directly at the root. Extract/select their contents if Studio does not accept ZIPs directly. Do not upload source code or node_modules.
+Nothing is published automatically. Live operator verification requires a provider-issued launch URL. Local RGS tests use the real pinned client with mocked responses and place no external bets.
 
-Nothing has been uploaded or published automatically. Live RGS testing still requires an authorized Stake Engine launch URL.
+## Architecture and configuration
 
-## Architecture
+config/game.json controls base RTP, raw cap, logarithmic distribution, route variety and supported depths. math/games/deep_dive/depths.py derives the three probability tables and landing bonuses. game_config.py maps them to official BetMode objects; gamestate.py emits the selected mode's events; route.py builds exact paths. run.py uses official create_books / generate_configs and writes weights before hash generation. scripts/run_math.py removes obsolete mode files, stages code into the SDK's games/deep_dive layout, checks all modes, then exports library files and demo fixtures. Edit math/games/deep_dive, not the staged copy in .stake.
 
-```text
-config/game.json                 Prototype identity, outcome catalogue, RTP/cap
-math/games/deep_dive/
-  game_config.py                Official Config/BetMode/Distribution setup
-  distribution.py               Exact integer weights and validated catalogue
-  route.py                      Payout-first route search and encounter effects
-  gamestate.py                  SDK event books and final-win accounting
-  run.py                        Official simulation/config workflow
-  library/publish_files/        Generated RGS math trio
-frontend/src/
-  App.svelte                    Round lifecycle and event playback
-  lib/books.ts                  Typed contract and arithmetic validation
-  lib/flight.ts                 Exact route interpolation and bounce arcs
-  lib/Ocean.svelte               Scrolling scene and seabed geometry
-  lib/Pickup.svelte              Original collectible/mine SVGs
-  lib/AnimatedSub.svelte         User-supplied GIF decoding/masking
-  lib/session.ts                Official RGS adapter and local demo
-frontend/public/                Local sprites, generated books and math config
-scripts/                        Setup, generation and verification
-.stake/                         Pinned SDK checkout + Python venv (ignored)
-```
+frontend/public/math-model.json contains per-depth odds, caps and generated outcomes. Demo books are split by mode and loaded only when needed. frontend/src/lib/books.ts validates first-zero stops, near-bottom zero landings and the landing bonus. session.ts sends the chosen mode using the documented Play({amount, mode}) call. App.svelte handles depth selection, event playback and settlement; Ocean.svelte renders the scene and wake.
 
-The SDK requires `games/<id>/` inside its own checkout. The runner stages source there, runs it, then copies output back; edit `math/games/deep_dive/`, not `.stake/`. The SDK normally preserves an existing final weight table; our unoptimized runner invalidates its old copied table before regeneration so new books cannot accidentally use stale payouts. Generated SDK frontend/backend/optimization configs remain in `library/configs/`.
+Mode IDs are base for 100 m, depth_300 for 300 m and depth_600 for 600 m. Removed depth modes are rejected. An active authenticated round restores its depth from validated launch metadata and checks it against round.mode. Authenticate(), Play() and EndRound() remain the official SDK calls. Wallet units are 1,000,000 per currency unit; event multipliers use hundredths. Partial launch parameters fail rather than silently falling back to demo.
 
-`config/game.json` is CZN's own configuration, not an invented Stake Engine deployment API. Provider number 0 is a placeholder. The official SDK is pinned to a6dccd86de740cc5d318079483cb6204cc5c19bc; `stake-engine` is pinned to 0.1.32. npm and Python dependency locks are included. The simple official fifty_fifty + Svelte/Vite walkthrough was selected instead of the larger optional Pixi/Svelte/Turbo/Storybook monorepo.
+SDK pins: Python math-sdk a6dccd86de740cc5d318079483cb6204cc5c19bc; TypeScript stake-engine 0.1.32. Provider number 0 remains a placeholder. The simplest official fifty_fifty and Svelte/Vite examples were used instead of the optional larger monorepo. See docs/stake-engine-notes.md for the original source review and THIRD_PARTY_NOTICES.md for asset/dependency notices. The user's supplied PNGs and submarine GIF are served locally.
 
-## RGS integration
+Interface icons use Lucide Svelte (@lucide/svelte 1.57.0), with direct imports for the controls. The icon license ships in licenses/lucide.txt.
 
-A provider-issued launch URL supplies `sessionID`, `rgs_url`, `lang` and `device`. The pinned client expects rgs_url as a host without a protocol prefix and uses HTTPS. Authentication supplies integer bet levels and authoritative balance. Wallet amounts use 1,000,000 units per currency unit, independently of math multipliers' scale of 100.
+Changing difficulty after a settled round resets the camera/scene preview to the new target. The selected seabed depth is displayed beside the odds; the selector itself keeps Easy / Medium / Hard labels.
 
-The documented client methods are Authenticate(), Play({amount, mode: 'base'}), and EndRound(). Events arrive in round.state. An active recovered round replays from its beginning; after ground contact, EndRound is called only if round.active remains true. Auto-closed rounds receive no extra close call. Partial launch parameters fail visibly instead of falling back to demo. API/network failures block new bets until reload/authentication.
+## Engine platform behavior
 
-Autoplay is bounded to 10/25/50 rounds and can stop after the current dive. Speed controls affect playback only. Autoplay/turbo follow the session's jurisdiction flags. Non-zero minimumRoundDuration is rejected pending confirmation of its publicly undocumented unit. Complete jurisdiction displays, localization, checkpoint recovery and operator controls remain future production work.
+The launch adapter accepts bare RGS hosts and full HTTP/HTTPS addresses, preserves the supplied host and path, and falls back to English for unsupported language codes. An unfinished round restores its original play amount. Space starts the same action as the main control, subject to availability and regional settings.
 
-## Animated sprite
+Amounts preserve significant micro-units, including sub-cent returns. USD, EUR, CAD, MXN, JPY and SC/GC formatting share one formatter. Social launches use neutral wording throughout the interface, rules, errors and replay.
 
-The user-supplied GIF is stored locally in assets/submarine-scene.gif. Pinned gifuct-js 2.1.2 decodes its 28 frames. A source-specific canvas mask removes edge-connected cave/water pixels while retaining enclosed portholes and the submarine. First 17 frames provide ordinary animation; the explosion sequence is used only for a zero-payout ground finish, not a mine that merely halves value. Reduced motion freezes sprite animation. The earlier PNG is a loading/error fallback. No runtime requests go to Envato/Trello. Source GIF bytes are preserved.
+Replay links use `replay=true&game=deep_dive&version=…&mode=…&event=…&rgs_url=…`; optional `amount`, `currency`, `lang`, `device` and `social` parameters are supported. Replay fetches the recorded event without creating a wallet session, displays the base amount and total cost, and supports repeat playback.
 
-
-## Version 0.3 — scattered ocean field
-
-Encounter gaps and the final approach now vary by route; see Variable journeys above. Travel duration scales with the gap so the submarine has room to move between collisions. Each book contains at least 60 randomly placed, scaled and rotated scenery objects in its launch event, including uncollected reward/mine icons plus harmless fish, shells and bottles. Objects fill the water above and below the route, scroll with the world and remain visible at the end. Reward/mine scenery is excluded from a swept hull-sized safety corridor; neutral scenery sits in the background and has no collision effect. All scenery is deterministic per book for replay/reconnect, and never changes value or adds payout-bearing events. Scenery does not affect outcome probabilities; see the current model above. Republish the refreshed math and frontend together to receive the new field data.
+See [the Engine fixes and verification record](docs/engine-approval-fixes.md) for the addressed guideline IDs, local evidence and remaining operator/human checks.

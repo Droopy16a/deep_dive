@@ -14,9 +14,10 @@ class GameState(Executables):
         self.reset_seed(sim, simulation_seed)
         self.reset_book()
         # The payout is fixed BEFORE any route search or visual path generation.
-        target = self.config.payout_catalogue[sim % len(self.config.payout_catalogue)]
+        model = self.config.depth_models[self.betmode]
+        target, _ = model["catalogue"][sim % len(model["catalogue"]) ]
         payout = target / 100
-        for event in generate_route(target, sim):
+        for event in generate_route(target, sim + model["depth"] * 10000, model["depth"], model["landingBonus"]):
             self.book.add_event({"index": len(self.book.events), **event})
         self.win_manager.update_spinwin(payout)
         self.win_manager.update_gametype_wins(self.gametype)

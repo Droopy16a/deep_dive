@@ -1,7 +1,7 @@
 """Adapted from the official games/fifty_fifty/game_config.py."""
 import json
 import os
-from distribution import build_catalogue
+from depths import build_depth_models
 from pathlib import Path
 
 from src.config.config import Config, BetMode
@@ -18,10 +18,8 @@ class GameConfig(Config):
         self.game_name = settings["name"]
         self.working_name = self.game_id
         self.rtp = settings["prototypeRtp"]
-        self.wincap = settings["maxWin"]
-        catalogue = build_catalogue(settings)
-        self.payout_catalogue = [payout for payout, _ in catalogue]
-        self.selection_weights = [weight for _, weight in catalogue]
+        self.depth_models = build_depth_models(settings)
+        self.wincap = max(model["maxWin"] for model in self.depth_models.values())
         self.win_type = "other"
         self.construct_paths()
         self.num_reels = 0
@@ -32,10 +30,10 @@ class GameConfig(Config):
         self.freespin_triggers = {self.basegame_type: {}, self.freegame_type: {}}
         self.anticipation_triggers = {self.basegame_type: 0, self.freegame_type: 0}
         self.bet_modes = [BetMode(
-            name=settings["mode"], cost=settings["cost"], rtp=self.rtp,
-            max_win=self.wincap, auto_close_disabled=False,
+            name=model["mode"], cost=model["cost"], rtp=model["rtp"],
+            max_win=model["maxWin"], auto_close_disabled=False,
             is_feature=True, is_buybonus=False,
             distributions=[Distribution(criteria="basegame", quota=1.0, conditions={
                 "reel_weights": {}, "force_wincap": False, "force_freegame": False,
             })],
-        )]
+        ) for model in self.depth_models.values()]

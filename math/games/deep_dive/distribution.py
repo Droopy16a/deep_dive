@@ -19,6 +19,9 @@ def build_outcomes(settings):
     count, total, zero, cap_weight = (model[key] for key in ("quantiles", "totalWeight", "zeroWeight", "maxWinWeight"))
     if not all(type(n) is int for n in (count, total, zero, cap_weight)) or count < 2 or total > 2**32 or zero < 1 or cap_weight < 1:
         raise ValueError("Invalid logarithmic distribution parameters")
+    variants = model.get("routeVariants", 1)
+    if type(variants) is not int or variants < 1:
+        raise ValueError("routeVariants must be a positive integer")
     cap = int(Fraction(str(settings["maxWin"])) * 100)
     target = Fraction(str(settings["prototypeRtp"])) * total * 100 - cap * cap_weight
     remaining = total - zero - cap_weight
@@ -48,7 +51,7 @@ def build_outcomes(settings):
         residual -= incremented
     if residual:
         raise ValueError("Could not calibrate logarithmic model to exact RTP")
-    return [dict(multiplier=payout, weight=weight, books=model["zeroBooks"] if payout == 0 else 1)
+    return [dict(multiplier=payout, weight=weight, books=model["zeroBooks"] if payout == 0 else min(variants, weight))
             for payout, weight in sorted(frequencies.items()) if weight]
 
 

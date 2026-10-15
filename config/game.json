@@ -1,6 +1,6 @@
 {
   "id": "deep_dive",
-  "name": "Deep Dive",
+  "name": "Trenchbound Relay",
   "provider": "CZN Studios",
   "version": "0.3.0",
   "status": "prototype",
@@ -9,13 +9,19 @@
   "cost": 1.0,
   "prototypeRtp": 0.964,
   "maxWin": 250.0,
-  "mathModel": "Independent logarithmic inverse-CDF model calibrated to 97% RTP and 250x maximum; not BGaming probabilities.",
+  "mathModel": "Independent logarithmic inverse-CDF model calibrated to the configured RTP and maximum; not BGaming probabilities.",
   "distribution": {
     "type": "logarithmic",
     "quantiles": 96,
     "totalWeight": 100000,
     "zeroWeight": 50000,
     "zeroBooks": 50,
-    "maxWinWeight": 1
-  }
+    "maxWinWeight": 1,
+    "routeVariants": 3
+  },
+  "depths": [
+    100,
+    300,
+    600
+  ]
 }

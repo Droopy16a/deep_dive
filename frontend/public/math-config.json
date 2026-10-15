@@ -1,8 +1,8 @@
 {
     "providerName": "CZN Studios",
-    "gameName": "Deep Dive",
+    "gameName": "Trenchbound Relay",
     "gameID": "deep_dive",
-    "rtp": 0.97,
+    "rtp": 0.964,
     "numReels": 0,
     "numRows": [],
     "betModes": {
@@ -10,8 +10,22 @@
             "cost": 1.0,
             "feature": true,
             "buyBonus": false,
-            "rtp": 0.97,
+            "rtp": 0.964,
             "max_win": 250.0
+        },
+        "depth_300": {
+            "cost": 1.0,
+            "feature": true,
+            "buyBonus": false,
+            "rtp": 0.964,
+            "max_win": 750.0
+        },
+        "depth_600": {
+            "cost": 1.0,
+            "feature": true,
+            "buyBonus": false,
+            "rtp": 0.964,
+            "max_win": 1500.0
         }
     },
     "symbols": [],

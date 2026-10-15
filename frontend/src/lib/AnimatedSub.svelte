@@ -96,5 +96,5 @@
   });
 </script>
 <canvas bind:this={canvas} {width} {height} class:ready={loaded} aria-hidden="true"></canvas>
-{#if !loaded}<img src={`${import.meta.env.BASE_URL}assets/submarine.png`} alt=""/>{/if}
-<style>canvas,img{width:100%;height:100%;object-fit:contain;display:block}canvas{display:none}canvas.ready{display:block}</style>
+{#if !loaded}<svg viewBox="0 0 180 126" role="img" aria-label="Submarine"><path d="M42 60H130Q165 60 165 84Q165 108 130 108H42Q15 108 15 84Q15 60 42 60Z" fill="#e9b34f" stroke="#153d50" stroke-width="4"/><path d="M70 60V43H100V60M85 43V28H108" fill="none" stroke="#e9b34f" stroke-width="7"/>{#each [50,85,120] as x}<circle cx={x} cy="82" r="12" fill="#9ddde4" stroke="#153d50" stroke-width="4"/>{/each}</svg>{/if}
+<style>canvas,svg{width:100%;height:100%;object-fit:contain;display:block}canvas{display:none}canvas.ready{display:block}</style>
