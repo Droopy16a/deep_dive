@@ -23,6 +23,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
 The MIT License (MIT)
 
 Copyright (c) 2015 Matt Way
@@ -94,3 +95,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Lilita One
+
+Lilita One Regular by Juan Montoreano, Copyright (c) 2011, is bundled locally from the Google Fonts repository under the SIL Open Font License 1.1. The complete license is shipped in `frontend/public/licenses/lilita-one-OFL.txt`. Font source: https://github.com/google/fonts/tree/main/ofl/lilitaone.
