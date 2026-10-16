@@ -12,6 +12,8 @@
     "preview": "npm --prefix frontend run preview -- --host 127.0.0.1",
     "test:wake": "node scripts/check_wake.mjs",
     "test:playback": "node scripts/check_playback.mjs",
-    "test:impacts": "node scripts/check_impacts.mjs"
+    "test:impacts": "node scripts/check_impacts.mjs",
+    "test:reference": "node scripts/check_reference_model.mjs",
+    "test:payouts": "node scripts/check_payout_contract.mjs"
   }
 }

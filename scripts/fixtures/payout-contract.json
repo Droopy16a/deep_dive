@@ -1,0 +1,14 @@
+{
+  "demo-books.json": {
+    "books": 339,
+    "sha256": "1d6eae8388aaf2952240b041ada2175c676100d3f7cffe8bba7054b688a0d7bd"
+  },
+  "demo-books-depth_300.json": {
+    "books": 339,
+    "sha256": "e091154ec78a6da6f06ca356cf9a494aff22cb5aaed3839ba37db9f8cf5f85cd"
+  },
+  "demo-books-depth_600.json": {
+    "books": 339,
+    "sha256": "5ba78288eb9511ae1705bb6422cd08e7820bff985fd5c0df5afa1a5631826123"
+  }
+}

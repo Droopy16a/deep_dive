@@ -6,6 +6,11 @@ const source = await fs.readFile(new URL('../frontend/src/lib/playback.ts', impo
 await fs.writeFile(output, ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext}}).outputText);
 try {
   const {createPlaybackClock} = await import(output.href);
+  for(const [speed,rate] of [.5,1,4,10].entries())assert.equal(createPlaybackClock(100000,speed,true).advance(1000,speed).end,1000*rate);
+  const native=createPlaybackClock(100000,1,true);
+  assert.equal(native.advance(1000,1).end,1000);
+  const change=native.advance(16,3);
+  assert.equal(change.start,1000);assert.equal(change.at(0),1000);assert.equal(change.end,1160);
   const rates = [0,1,2,3].map(speed => createPlaybackClock(10000,speed).advance(1000,speed).end/1000);
   assert.ok(rates[0]<1/1.5 && rates[1]<1 && rates[3]>1/.38);
   assert.equal(rates[2],1/.65);

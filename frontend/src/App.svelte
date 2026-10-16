@@ -4,9 +4,10 @@
   import { GAME_TITLE, formatAmount, launchCurrency, initialBet, loadReplay, sessionError, type ReplayData } from './lib/platform';
   import { createSession, modeForDepth, type GameSession } from './lib/session';
   import { readEvents, itemLabels, type DiveStep } from './lib/books';
-  import { sampleFlight, flightDuration } from './lib/flight';
+  import { sampleFlight, flightDuration, flightPitch, type FlightView } from './lib/flight';
   import { followCamera } from './lib/camera';
   import { createPlaybackClock } from './lib/playback';
+  import { createFlightOrientation } from './lib/flight-model';
   import Icon from './lib/Icon.svelte';
   import Ocean from './lib/Ocean.svelte';
   import type { WakeSample } from './lib/wake';
@@ -45,6 +46,7 @@
   const speeds = [ { label: 'Slow', icon: 'turtle', delay: 1100 }, { label: 'Normal', icon: 'walk', delay: 700 },
     { label: 'Fast', icon: 'fast', delay: 350 }, { label: 'Turbo', icon: 'bolt', delay: 160 } ];
   let camera = $state(0);
+  let flightView:FlightView = {width:1200,height:740,subWidth:340};
   const subTop = (depth: number) => `calc(${(.364 + depth * displayDepth / 100 * .012 - camera) * 100}% - var(--sub-width) * ${depth / 100 * 46 / 420})`;
   const depthTicks = $derived(Array.from({length: Math.floor(displayDepth / (displayDepth <= 200 ? 25 : 50)) + 1}, (_, i) => {
     const metres = i * (displayDepth <= 200 ? 25 : 50);
@@ -81,7 +83,9 @@
   }
   function playRoute(steps: DiveStep[]) {
     const duration = flightDuration(steps);
-    const clock = createPlaybackClock(duration, speed);
+    const clock = createPlaybackClock(duration, speed, steps[0].physics!.version===3);
+    const native=steps[0].physics!.version===3, orientation=createFlightOrientation();
+    let orientationPitch=0;
     const started = performance.now();
     let previousTime = started, nextEvent = 0;
     const timings: number[] = [];
@@ -92,15 +96,25 @@
         const clockFrame = clock.advance(Math.max(0, now - previousTime), speed);
         const elapsed = clockFrame.end;
         const position = sampleFlight(steps, elapsed, duration);
-        progress = position.depth; distance = position.distance;
+        progress = position.depth; distance = position.distance; grounded = position.grounded;
         camera = followCamera(camera, progress, roundDepth, now - previousTime);
         if (import.meta.env.DEV && now > previousTime) timings.push(now - previousTime);
-        pitch += (position.pitch - pitch) * (1 - Math.exp(-(now - previousTime) / 90));
+        const orientationSamples=new Map<number,number>([[Math.floor(clockFrame.start*.06),orientationPitch]]);
+        if(native) {
+          orientationPitch=orientation.advanceTo(Math.floor(elapsed*.06),tick=>sampleFlight(steps,tick*1000/60,duration).nativeVelocity,
+            (tick,value)=>orientationSamples.set(tick,value),tick=>flightPitch(sampleFlight(steps,tick*1000/60,duration).velocity,
+              120,roundDepth,flightView,false)*Math.PI/180);
+          pitch=orientationPitch;
+        } else {
+          const targetPitch = flightPitch(position.velocity, steps[0].physics!.horizontalSpeed, roundDepth, flightView);
+          pitch += (targetPitch - pitch) * (1 - Math.exp(-(now - previousTime) / 90));
+        }
         // Fill missed samples when a background tab throttles animation frames.
         // This keeps the curved wake intact rather than reducing it to a dot.
         for (let time = Math.max(previousTime, now - 1400) + 33; time < now - 16; time += 33) {
           const previous = sampleFlight(steps, clockFrame.at(time - previousTime), duration);
-          history.push({distance: previous.distance, depth: previous.depth, pitch: previous.pitch, time});
+          history.push({distance: previous.distance, depth: previous.depth,
+            pitch: native ? orientationSamples.get(Math.floor(clockFrame.at(time-previousTime)*.06))??orientationPitch : flightPitch(previous.velocity, steps[0].physics!.horizontalSpeed, roundDepth, flightView), time});
         }
         previousTime = now;
         history.push({distance, depth: progress, pitch, time: now});
@@ -116,7 +130,7 @@
         }
         if (elapsed >= duration) {
           const end = steps.at(-1)!;
-          progress = end.depth; grounded = end.item === 'ground'; pitch = grounded ? 0 : position.pitch;
+          progress = end.depth; grounded = end.item === 'ground'; pitch = grounded ? 0 : pitch;
           if (import.meta.env.DEV && timings.length) {
             const sorted = [...timings].sort((a,b) => a-b);
             console.debug('Trenchbound Relay motion', JSON.stringify({frames: timings.length,
@@ -256,7 +270,7 @@
 <svelte:window onkeydown={spacebar}/>
 
 <main class="game" class:playing={busy} class:launching={launching} class:shaking={shakeIntensity > 0} style={`--play-scale:${playSize};--play-opacity:${playOpacity};--shake-offset:${shakeIntensity * 6}px`}>
-  <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake}/></div>
+  <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake} onViewport={view => { flightView = view; }}/></div>
   <header class="topbar">
     <div class="studio"><span class="studio-mark">CZN</span><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : 'CZN STUDIOS'}</small></span></div>
     <div class="wordmark"><GameWordmark/></div>
@@ -269,7 +283,7 @@
   {#if ready || busy}
   {#if !completed}<div class="live-multiplier" aria-label={`Current multiplier ${multiplier.toFixed(2)} times`}>{multiplier.toFixed(2)}<span>x</span></div>{/if}
   <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(busy ? Math.round(bet * multiplier) : completed ? lastWin : bet)}</div>
-  {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
+  {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110 && distance >= (object.spawnDistance??-Infinity) && distance < (object.despawnDistance??Infinity)}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
   {#if busy}{#each routeSteps as step (step.index)}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span></div>{/if}{/each}{/if}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
   {#if completed && !busy}<div class="result" class:empty={multiplier === 0} role="status"><small>{status}</small><strong>{multiplier > 0 ? money(lastWin) : 'No treasure this time'}</strong><span>{multiplier.toFixed(2)}×</span></div>{/if}

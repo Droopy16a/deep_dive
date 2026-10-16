@@ -6,6 +6,7 @@ This allows a finite sequence of mines to reach zero without a hidden override.
 from collections import deque
 import random
 import math
+from flight_model import FlightModel, advance_vertical, contact_velocity
 
 OPERATIONS = ("bubble", "treasure", "chest", "pearl", "mine")
 SCENERY_ITEMS = (*OPERATIONS, "fish", "shell", "bottle")
@@ -16,15 +17,28 @@ DRAG = .45
 IMPULSES = {"bubble": 32.0, "treasure": 44.0, "chest": 70.0, "pearl": 56.0}
 
 
-def integrate(depth: float, velocity: float, seconds: float) -> tuple[float, float]:
-    """Exact solution of gravity plus linear water drag; no destination input."""
+def integrate(depth: float, velocity: float, seconds: float, physics=None) -> tuple[float, float]:
+    """Native tick physics, or legacy analytic drag for version 2 replay checks."""
+    if physics and physics["version"] == 3:
+        scale, ticks = physics["verticalScale"], seconds * 60
+        y, speed = advance_vertical(depth / scale - 6000, velocity, ticks)
+        whole = math.floor(ticks + 1e-8)
+        fraction = ticks - whole
+        if fraction > 1e-8:
+            before, before_speed = advance_vertical(depth / scale - 6000, velocity, whole)
+            after, _ = advance_vertical(before, before_speed, 1)
+            if before < 0 <= after:
+                return (before * (1 - fraction) + 6000) * scale, before_speed
+        return (6000 * scale, 0) if y >= 0 else ((y + 6000) * scale, speed)
     terminal = GRAVITY / DRAG
     decay = math.exp(-DRAG * seconds)
     return (depth + terminal * seconds + (velocity-terminal)*(1-decay)/DRAG,
             terminal + (velocity-terminal)*decay)
 
 
-def impact(depth: float, velocity: float, item: str) -> float:
+def impact(depth: float, velocity: float, item: str, physics=None) -> float:
+    if physics and physics["version"] == 3:
+        return contact_velocity(depth / physics["verticalScale"] - 6000, velocity, item == "mine") if item in OPERATIONS else velocity
     if item == "mine":
         return max(18.0, velocity + 10.0)
     if item in IMPULSES:
@@ -58,7 +72,7 @@ def depth_at(events: list[dict], distance: float) -> float:
             break
         before = event
     seconds = (distance-before["distance"])/launch["physics"]["horizontalSpeed"]
-    metres, _ = integrate(before["depth"]*launch["targetDepth"]/100, before["velocity"], seconds)
+    metres, _ = integrate(before["depth"]*launch["targetDepth"]/100, before["velocity"], seconds, launch["physics"])
     return metres*100/launch["targetDepth"]
 
 
@@ -72,10 +86,38 @@ def scenery_clear(events: list[dict], distance: float, depth: float) -> bool:
 def generate_scenery(events: list[dict], seed: int) -> list[dict]:
     rng = random.Random(seed ^ 0xD33F)
     end = events[-1]["distance"]
-    count = max(60, min(600, int(end // 9)))
     objects = []
+    if events[0]["physics"]["version"] == 3:
+        field = FlightModel(seed)
+        # Field placement and respawn are independent of collisions. Keep the
+        # observer outside the field so this records the original seeded layout
+        # without changing the authoritative payout-constrained trajectory.
+        field.y, field.vy = -1000000, 0
+
+        def remember(obj):
+            depth = (obj.y + 6000) / 60
+            distance = (field.distance + obj.x) / 40
+            if not 0 <= depth < 92:
+                return
+            item = "mine" if obj.rocket or obj.multiply < 1 else "bubble" if obj.add == 1 else "treasure" if obj.add else "chest" if obj.multiply == 2 else "pearl"
+            if not scenery_clear(events, distance, depth):
+                return
+            objects.append({"id": f"field-{seed}-{obj.id}-{obj.respawns}", "item": item,
+                            "distance": distance, "depth": depth, "scale": 1, "rotation": 0,
+                            "spawnDistance": field.distance / 40,
+                            "despawnDistance": (field.distance + max(1, math.ceil(obj.x / 80)) * 80) / 40})
+
+        for obj in field.objects:
+            remember(obj)
+        while field.distance / 40 <= end:
+            previous = [obj.respawns for obj in field.objects]
+            field.step()
+            for obj, respawns in zip(field.objects, previous):
+                if obj.respawns != respawns:
+                    remember(obj)
+    count = max(60, len(objects) + 35)
     for _ in range(count * 40):
-        item = rng.choice(SCENERY_ITEMS)
+        item = rng.choice(("fish", "shell", "bottle") if events[0]["physics"]["version"] == 3 else SCENERY_ITEMS)
         distance = round(rng.uniform(-40, end + 110), 2)
         depth = round(rng.uniform(0, 92), 2)
         if item in OPERATIONS and not scenery_clear(events, distance, depth):
@@ -174,59 +216,66 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
     else:
         items.extend(complete_path(value, raw_target, rng))
 
-    # Choose irregular encounter distances, then simulate forces to discover
-    # their depths. No segment aims at a prescribed next depth.
-    gaps = []
-    bands = [(52, 72), (90, 120), (145, 185)]
-    first_bands = list(range(3)); rng.shuffle(first_bands)
-    previous_band = -1
-    minimum_depths = [rng.uniform(8,12) for _ in items]
-    for index in range(len(items)):
-        band = first_bands[index] if index < 3 else rng.choice([i for i in range(3) if i != previous_band])
-        gaps.append(rng.randint(52,85) if items[index]=="mine" else rng.randint(*bands[band])); previous_band = band
-    ground_loss = target == 0 and seed % 3 == 0
-    near_floor = target_depth-rng.uniform(4,12)
-    speed = rng.uniform(170,220)
-    # Reject premature floor collisions, instead of bending a flight toward
-    # the planned pickups. A single forward speed applies for the whole book.
-    for attempt in range(30):
-        value, distance, time, depth, velocity = 100, 0.0, 0.0, 0.0, 26.0
-        events = [{"type":"diveStep", "item":"launch", "distance":0, "time":0,
-                   "depth":0, "velocity":velocity, "multiplier":value,
-                   "targetDepth":target_depth, "landingBonus":landing_bonus,
-                   "physics":{"version":2,"gravity":GRAVITY,"drag":DRAG,"horizontalSpeed":speed}}]
-        valid = True
-        for index, (item, gap) in enumerate(zip(items,gaps)):
-            seconds = gap/speed
-            # Leave enough time to pass the physical apex and begin falling
-            # before another encounter; never truncate a bounce halfway up.
-            if velocity < 0:
-                apex_time = math.log((GRAVITY/DRAG-velocity)/(GRAVITY/DRAG))/DRAG
-                seconds = max(seconds, apex_time+.25)
-            if item in IMPULSES and integrate(depth,velocity,seconds)[0] < minimum_depths[index]:
-                seconds = max(seconds,descent_time(depth,velocity,minimum_depths[index]))
-            if ground_loss and index == len(items)-1:
-                seconds = descent_time(depth,velocity,near_floor)
-                if seconds*speed < 52:
-                    valid = False; break
-            next_depth, incoming = integrate(depth,velocity,seconds)
-            if not 0 <= next_depth < target_depth-(0 if ground_loss and index == len(items)-1 else 20):
-                valid = False; break
-            time += seconds; distance = time*speed; depth = next_depth
-            velocity = impact(depth,incoming,item)
-            value = apply_item(value,item)
-            events.append({"type":"diveStep","item":item,"distance":distance,"time":time,
-                           "depth":depth*100/target_depth,"velocity":velocity,"multiplier":value})
-        if valid:
-            break
-        speed *= 1.15
-    else:
-        raise ValueError("Unable to simulate a collision-safe book")
+    # Money outcomes are intentionally unchanged. Their contacts are scheduled
+    # on the recovered fixed-tick trajectory, without destination steering.
+    # The reference's unrestricted field cannot replace this constrained book
+    # generator while retaining every requested payout value and weight.
+    physics = {"version": 3, "gravity": 1, "drag": 0, "horizontalSpeed": 120,
+               "verticalScale": target_depth / 6000}
+    tick, y, velocity, value = 0, -6000, 78, 100
+    events = [{"type": "diveStep", "item": "launch", "distance": 0, "time": 0,
+               "depth": 0, "velocity": velocity, "multiplier": value,
+               "targetDepth": target_depth, "landingBonus": landing_bonus, "physics": physics}]
+    events[0]["fieldSeed"] = seed
+
+    def floor_ticks(at_y, at_speed):
+        low, high = 0, 256
+        while advance_vertical(at_y, at_speed, high)[0] < 0:
+            high *= 2
+        while low + 1 < high:
+            middle = (low + high) // 2
+            if advance_vertical(at_y, at_speed, middle)[0] < 0:
+                low = middle
+            else:
+                high = middle
+        return high
+
+    for index, item in enumerate(items):
+        desired = rng.randint(30, 55) if index == 0 else rng.randint(*rng.choice([(6, 14), (18, 32), (42, 72)]))
+        if item == "mine":
+            desired = rng.randint(6, 24)
+        candidates = []
+        for gap in range(4, floor_ticks(y, velocity)):
+            at_y, incoming = advance_vertical(y, velocity, gap)
+            outgoing = contact_velocity(at_y, incoming, item == "mine")
+            # Reject placements whose resulting rise would leave the ocean.
+            # This chooses encounter timing; the force itself is never altered.
+            crest = advance_vertical(at_y, outgoing, max(0, -outgoing))[0]
+            if min(at_y, crest) < -5995:
+                continue
+            # Leave room for the next real hazard cluster, at four-tick spacing.
+            probe_y, probe_speed, safe = at_y, outgoing, True
+            for following in items[index + 1:]:
+                probe_y, probe_speed = advance_vertical(probe_y, probe_speed, 4)
+                if probe_y >= 0:
+                    safe = False
+                    break
+                probe_speed = contact_velocity(probe_y, probe_speed, following == "mine")
+            if safe:
+                candidates.append((abs(gap - desired), gap, at_y, outgoing))
+        if not candidates:
+            raise ValueError(f"No force-driven placement for seed {seed}, contact {index}, y={y}, v={velocity}, remaining={items[index:]}")
+        _, gap, y, velocity = min(candidates)
+        tick += gap
+        value = apply_item(value, item)
+        events.append({"type": "diveStep", "item": item, "distance": tick * 2, "time": tick / 60,
+                       "depth": (y + 6000) / 60, "velocity": velocity, "multiplier": value})
     assert value == raw_target
-    if target or ground_loss:
-        seconds = descent_time(depth,velocity,target_depth)
-        time += seconds
-        events.append({"type":"diveStep","item":"ground","distance":time*speed,"time":time,
-                       "depth":100,"velocity":0,"multiplier":value*landing_bonus,"landingBonus":landing_bonus})
+    tick += floor_ticks(y, velocity)
+    # Reference braking runs 39 more ticks, consuming 39 world-distance units.
+    # Zero-value rounds coast to the floor as well; no mid-flight termination.
+    events.append({"type": "diveStep", "item": "ground", "distance": tick * 2 + 39,
+                   "time": (tick + 39) / 60, "touchdownTime": tick / 60, "touchdownDistance": tick * 2,
+                   "depth": 100, "velocity": 0, "multiplier": value * landing_bonus, "landingBonus": landing_bonus})
     events[0]["scenery"] = generate_scenery(events, seed)
     return events

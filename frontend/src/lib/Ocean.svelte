@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import AnimatedSub from './AnimatedSub.svelte';
   import { buildWake, type WakeSample } from './wake';
-  let { targetDepth, camera, progress, distance, pitch, grounded, busy, lost, wake }: { targetDepth: number; camera: number; progress: number; distance: number; pitch: number; grounded: boolean; busy: boolean; lost: boolean; wake: WakeSample[] } = $props();
+  import type { FlightView } from './flight';
+  let { targetDepth, camera, progress, distance, pitch, grounded, busy, lost, wake, onViewport }: { targetDepth: number; camera: number; progress: number; distance: number; pitch: number; grounded: boolean; busy: boolean; lost: boolean; wake: WakeSample[]; onViewport: (view:FlightView)=>void } = $props();
   let submarine: SVGSVGElement;
   let viewport = $state({width:1200, height:740, subWidth:340});
   const trail = $derived(buildWake(wake, {...viewport, distance, targetDepth, camera}));
@@ -12,6 +13,7 @@
     const measure = () => {
       const rect = parent.getBoundingClientRect();
       viewport = {width:rect.width, height:rect.height, subWidth:submarine.getBoundingClientRect().width};
+      onViewport(viewport);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(parent); observer.observe(submarine); measure();

@@ -56,4 +56,6 @@ The regular positive distribution now uses -s*ln(1-u) at 96 quantiles, rounded t
 
 ## Depth-mode integration — 15 October 2026
 
+Historical integration note: the version 3 migration on October 16 supersedes the gravity/drag and early-zero termination behavior below. Current books use reference tick forces, coast to the seabed, and brake before settlement. Payout outcomes and weights are unchanged; see README and motion-investigation.md.
+
 Verified pinned SDK source: create_books iterates the caller-provided betmode-name dictionary and sets gamestate.betmode; get_current_betmode resolves config.bet_modes. We now define three official BetMode objects: base (100 m), depth_300 (300 m), depth_600 (600 m) and use the existing documented Play mode field, without new endpoints. Each mode has its own books/weights and SDK-generated hashes/index entries. Ground contact applies an explicit depth bonus; a zeroing mine ends immediately in open water or proceeds only to zero-valued ground contact within 12 m of the floor. Gravity/drag motion uses the selected world depth and a vertical camera. Removed mode files and demo catalogues are pruned before export. All mode manifests and hashes are validated by scripts/run_math.py.

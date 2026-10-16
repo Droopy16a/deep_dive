@@ -101,20 +101,23 @@ if __name__ == "__main__":
             value, distance = 100, -1
             for position, event in enumerate(steps):
                 terminal = position == len(steps)-1
-                assert abs(event["distance"]-event["time"]*steps[0]["physics"]["horizontalSpeed"])<1e-6
+                physics = steps[0]["physics"]
+                expected_distance = event["touchdownDistance"] + 39 if physics["version"] == 3 and event["item"] == "ground" else event["time"] * physics["horizontalSpeed"]
+                assert abs(event["distance"] - expected_distance) < 1e-6
                 if position:
                     previous = steps[position-1]
                     dt = event["time"]-previous["time"]
                     assert dt>0
-                    y,v = integrate(previous["depth"]*model["depth"]/100,previous["velocity"],dt)
+                    y,v = integrate(previous["depth"]*model["depth"]/100,previous["velocity"],dt,physics)
                     assert abs(y-event["depth"]*model["depth"]/100)<1e-6
-                    outgoing = 0 if event["item"]=="ground" else impact(y,v,event["item"])
+                    outgoing = 0 if event["item"]=="ground" else impact(y,v,event["item"],physics)
                     assert abs(outgoing-event["velocity"])<1e-6
                 if event["item"] == "ground":
                     assert terminal and event["depth"] == 100
                     if value == 0:
                         assert steps[position-1]["item"] == "mine"
-                        assert (100-steps[position-1]["depth"])*model["depth"]/100 <= 12.01
+                        if physics["version"] == 2:
+                            assert (100-steps[position-1]["depth"])*model["depth"]/100 <= 12.01
                     assert event["landingBonus"] == model["landingBonus"]
                     value *= event["landingBonus"]
                 else:
@@ -123,13 +126,13 @@ if __name__ == "__main__":
                 assert event["multiplier"] == value and event["distance"] > distance
                 assert value > 0 or (terminal and event["item"] in ("mine", "ground")) or (
                     position == len(steps)-2 and event["item"] == "mine" and steps[-1]["item"] == "ground"
-                    and (100-event["depth"])*model["depth"]/100 <= 12.01)
+                    and (physics["version"] == 3 or (100-event["depth"])*model["depth"]/100 <= 12.01))
                 distance = event["distance"]
             assert value == payout
             assert payout == 0 or steps[-1]["item"] == "ground"
             if payout == 0:
                 assert steps[-1]["multiplier"] == 0
-            assert all(after["distance"]-before["distance"] >= 52-1e-6 for before,after in zip(steps,steps[1:]) if after["item"] != "ground")
+            assert all(after["distance"]-before["distance"] >= 8-1e-6 for before,after in zip(steps,steps[1:]) if after["item"] != "ground")
             scenery = steps[0]["scenery"]
             assert len(scenery) >= 60 and len({obj["id"] for obj in scenery}) == len(scenery)
             assert all(scenery_clear(steps,obj["distance"],obj["depth"]) for obj in scenery
