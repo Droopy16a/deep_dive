@@ -62,7 +62,11 @@ if __name__ == "__main__":
     for mode in models:
         (staged / f"library/publish_files/lookUpTable_{mode}_0.csv").unlink(missing_ok=True)
     subprocess.run([sys.executable, str(staged / "run.py")], cwd=SDK,
-                   env={**os.environ, "DEEP_DIVE_CONFIG": str(ROOT / "config/game.json")}, check=True)
+                   env={**os.environ, "DEEP_DIVE_CONFIG": str(ROOT / "config/game.json"),
+                        # Executing games/deep_dive/run.py puts that directory,
+                        # rather than the SDK root, on Python's import path.
+                        # Child workers need the SDK root as well.
+                        "PYTHONPATH": os.pathsep.join(filter(None, [str(SDK), os.environ.get("PYTHONPATH")]))}, check=True)
     library = SOURCE / "library"
     shutil.copytree(staged / "library", library, dirs_exist_ok=True)
     publish = library / "publish_files"

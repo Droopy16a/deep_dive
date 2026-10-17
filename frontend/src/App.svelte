@@ -12,7 +12,7 @@
   import Ocean from './lib/Ocean.svelte';
   import type { WakeSample } from './lib/wake';
   import Pickup from './lib/Pickup.svelte';
-  import GameWordmark from './lib/GameWordmark.svelte';
+  // import GameWordmark from './lib/GameWordmark.svelte';
 
   const launchParams = new URL(window.location.href).searchParams;
   const replay = launchParams.get('replay') === 'true';
@@ -31,6 +31,7 @@
   let flags = $state<JurisdictionFlags | null>(null);
   let routeSteps = $state<DiveStep[]>([]);
   let wake = $state<WakeSample[]>([]);
+  // Field lifetimes control respawning, not visibility: retain old props until offscreen.
   const offPathItems = $derived((routeSteps[0]?.scenery ?? []).filter(object =>
     ['bubble', 'treasure', 'chest', 'pearl', 'mine'].includes(object.item)));
   type DepthMode = {mode:string;depth:number;landingBonus:number;rtp:number;maxWin:number;winProbability:number};
@@ -272,18 +273,17 @@
 <main class="game" class:playing={busy} class:launching={launching} class:shaking={shakeIntensity > 0} style={`--play-scale:${playSize};--play-opacity:${playOpacity};--shake-offset:${shakeIntensity * 6}px`}>
   <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake} onViewport={view => { flightView = view; }}/></div>
   <header class="topbar">
-    <div class="studio"><span class="studio-mark">CZN</span><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : 'CZN STUDIOS'}</small></span></div>
-    <div class="wordmark"><GameWordmark/></div>
+    <div class="studio"><img class="studio-logo" src={`${import.meta.env.BASE_URL}czn-studios-logo.png`} alt="CZN Studios"/><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : 'DEMO \u00b7 SIMULATED BALANCE'}</small></span></div>
+    <!-- <div class="wordmark"><GameWordmark/></div> -->
     <div class="top-actions">
       <button class="icon-button" onclick={toggleSound} aria-label={sound ? 'Mute sound' : 'Enable sound'} aria-pressed={sound}><Icon name={sound ? 'sound' : 'mute'} size={21}/></button>
       <button class="icon-button" onclick={() => modal = 'settings'} aria-label="Open settings"><Icon name="menu" size={21}/></button>
     </div>
   </header>
-  <div class="session-label">{replay ? 'RECORDED ROUND · VIEW ONLY' : demo ? (social ? 'DEMO · SIMULATED COINS' : 'DEMO · SIMULATED BALANCE') : 'RGS SESSION'}</div>
   {#if ready || busy}
   {#if !completed}<div class="live-multiplier" aria-label={`Current multiplier ${multiplier.toFixed(2)} times`}>{multiplier.toFixed(2)}<span>x</span></div>{/if}
   <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(busy ? Math.round(bet * multiplier) : completed ? lastWin : bet)}</div>
-  {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 65 && object.distance < distance + 110 && distance >= (object.spawnDistance??-Infinity) && distance < (object.despawnDistance??Infinity)}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
+  {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 110 && object.distance < distance + 110 && distance >= (object.spawnDistance??-Infinity)}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
   {#if busy}{#each routeSteps as step (step.index)}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span></div>{/if}{/each}{/if}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
   {#if completed && !busy}<div class="result" class:empty={multiplier === 0} role="status"><small>{status}</small><strong>{multiplier > 0 ? money(lastWin) : 'No treasure this time'}</strong><span>{multiplier.toFixed(2)}×</span></div>{/if}
@@ -297,7 +297,14 @@
     {#if replay}
       <div class="replay-details"><strong>{replayData?.modeLabel} · Replay</strong><span>Play amount: {money(bet)}</span><span>Cost multiplier: {replayData?.costMultiplier}× · {social ? 'Total play' : 'Round cost'}: {money(bet * (replayData?.costMultiplier ?? 1))}</span></div>
     {:else}
-      <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="depth-bet-controls"><label class="depth-control"><small>DIFFICULTY</small><span class="difficulty-select"><select aria-label="Difficulty" value={selectedDepth} onchange={(event) => changeDifficulty(Number(event.currentTarget.value))} disabled={busy || !!autoRemaining || !ready}>{#each difficulties as difficulty}<option value={difficulty.depth}>{difficulty.label}</option>{/each}</select><Icon name="chevron-down" size={18}/></span></label><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><span><small>TOTAL PLAY</small><strong>{money(bet)}</strong></span></button><div class="bet-arrows"><button aria-label="Increase play amount" onclick={() => changeBet(1)} disabled={busy || !!autoRemaining || !ready || bet === levels.at(-1)}><Icon name="chevron-up" size={14}/></button><button aria-label="Decrease play amount" onclick={() => changeBet(-1)} disabled={busy || !!autoRemaining || !ready || bet === levels[0]}><Icon name="chevron-down" size={14}/></button></div></div></div></div>
+      <div class="wallet-row"><div class="balance"><small>{demo ? 'DEMO BALANCE' : 'BALANCE'}</small><strong>{money(balance.amount)}</strong></div><div class="depth-bet-controls"><div class="depth-control" role="group" aria-labelledby="difficulty-label">
+          <small id="difficulty-label">DIFFICULTY</small>
+          <div class="difficulty-options">
+            {#each difficulties as difficulty}
+              <button type="button" class:selected={selectedDepth === difficulty.depth} aria-pressed={selectedDepth === difficulty.depth} onclick={() => changeDifficulty(difficulty.depth)} disabled={busy || !!autoRemaining || !ready}>{difficulty.label}</button>
+            {/each}
+          </div>
+        </div><div class="bet-control"><button class="bet-display" onclick={() => modal = 'bet'} disabled={busy || !!autoRemaining || !ready}><span><small>TOTAL PLAY</small><strong>{money(bet)}</strong></span></button><div class="bet-arrows"><button aria-label="Increase play amount" onclick={() => changeBet(1)} disabled={busy || !!autoRemaining || !ready || bet === levels.at(-1)}><Icon name="chevron-up" size={14}/></button><button aria-label="Decrease play amount" onclick={() => changeBet(-1)} disabled={busy || !!autoRemaining || !ready || bet === levels[0]}><Icon name="chevron-down" size={14}/></button></div></div></div></div>
     {/if}
     <p class="depth-odds">{selectedMode ? `${selectedDepth} m seabed · ${(selectedMode.winProbability * 100).toFixed(1)}% landing chance · ×${selectedMode.landingBonus} landing bonus` : "Preparing depths"}</p>
     <p class="game-status" aria-live="polite" id="play-explanation">{error || (insufficient ? 'Your balance is too low for this play amount.' : autoRemaining ? `Autoplay · ${autoRemaining} dives remaining` : '')}</p>

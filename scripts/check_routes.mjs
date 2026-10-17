@@ -29,6 +29,8 @@ try {
       assert.equal(events.at(-1).amount,book.payoutMultiplier);
       assert.equal(steps[0].targetDepth,mode.depth);
       assert.equal(steps[0].landingBonus,mode.landingBonus);
+      assert.equal(steps[0].physics.verticalScale,1/60,'all difficulties use Easy movement scale');
+      assert.equal(steps[0].physics.fieldHeight,mode.depth*60,'difficulty extends the field');
       assert.ok(book.payoutMultiplier===0 || last.item==='ground');
       if(book.payoutMultiplier===0) {
         if(last.item==='ground') {
@@ -136,8 +138,8 @@ try {
       assert.ok(Math.abs(incoming.depth-after.depth*mode.depth/100)<1e-6);
       if(after.item!=='ground')assert.ok(Math.abs(impact(incoming.depth,incoming.velocity,after.item,physics)-after.velocity)<1e-6);
       if(physics.version===3 && after.item!=='ground') {
-        const native=advanceVertical(before.depth*60-6000,before.velocity,dt*60);
-        assert.ok(Math.abs(native.y-(after.depth*60-6000))<1e-6,'book contact must match native tick displacement');
+        const native=advanceVertical(before.depth*mode.depth/100/physics.verticalScale-6000,before.velocity,dt*60);
+        assert.ok(Math.abs(native.y-(after.depth*mode.depth/100/physics.verticalScale-6000))<1e-6,'book contact must match native tick displacement');
       }
       // Moving a future collectible cannot pull the vessel toward it.
       const middle=(before.distance+after.distance)/2;

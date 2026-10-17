@@ -24,7 +24,9 @@ export function readEvents(state: unknown): BookEvent[] {
   if (![100, 300, 600].includes(depth) || bonus !== depth / 100) throw new Error('Invalid target depth');
   const physics = state[0]?.physics;
   const native=physics?.version===3;
-  if (!physics || (native ? physics.gravity!==1 || physics.drag!==0 || physics.horizontalSpeed!==120 || physics.verticalScale!==depth/6000 : physics.version!==2 || physics.gravity!==18 || physics.drag!==.45) ||
+  const validNativeScale=physics?.fieldHeight===undefined ? physics?.verticalScale===depth/6000 :
+    physics.fieldHeight===depth*60 && physics.verticalScale===1/60;
+  if (!physics || (native ? physics.gravity!==1 || physics.drag!==0 || physics.horizontalSpeed!==120 || !validNativeScale : physics.version!==2 || physics.gravity!==18 || physics.drag!==.45) ||
       !Number.isFinite(physics.horizontalSpeed) || physics.horizontalSpeed<=0) throw new Error('Upload matching physics math and frontend');
   let value = 100, distance = -1;
   for (const [index, event] of state.entries()) {

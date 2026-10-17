@@ -1,5 +1,5 @@
 import {advanceVertical,contactVelocity} from './flight-model';
-export type Physics = {version: number; gravity: number; drag: number; horizontalSpeed: number;verticalScale?:number};
+export type Physics = {version: number; gravity: number; drag: number; horizontalSpeed: number;verticalScale?:number;fieldHeight?:number};
 export type FlightStep = {depth:number;distance:number;time:number;velocity:number;item:string;targetDepth?:number;physics?:Physics;touchdownTime?:number;touchdownDistance?:number};
 export type FlightView = {width:number;height:number;subWidth:number};
 export function flightPitch(velocity:number, horizontalSpeed:number, targetDepth:number, view:FlightView={width:1200,height:740,subWidth:340}, limited=true) {
@@ -15,7 +15,7 @@ export const impulses: Record<string,number> = {bubble:32,treasure:44,chest:70,p
 // Neither branch aims at a future collectible.
 export function integrate(depth:number, velocity:number, seconds:number, physics:Physics) {
   if(physics.version===3) {
-    const scale=physics.verticalScale!, ticks=seconds*60;
+    const scale=physics.verticalScale!, ticks=seconds*60, height=physics.fieldHeight??6000, floor=height-6000;
     const state=advanceVertical(depth/scale-6000,velocity,ticks);
     // At touchdown the native model clamps to the floor. Interpolate toward
     // that clamped tick so rendering cannot overshoot or stick below the floor.
@@ -23,9 +23,9 @@ export function integrate(depth:number, velocity:number, seconds:number, physics
     if(fraction>1e-8) {
       const before=advanceVertical(depth/scale-6000,velocity,whole);
       const after=advanceVertical(before.y,before.velocity,1);
-      if(before.y<0 && after.y>=0)return {depth:(before.y*(1-fraction)+6000)*scale,velocity:before.velocity};
+      if(before.y<floor && after.y>=floor)return {depth:((before.y-floor)*(1-fraction)+height)*scale,velocity:before.velocity};
     }
-    if(state.y>=0)return {depth:6000*scale,velocity:0};
+    if(state.y>=floor)return {depth:height*scale,velocity:0};
     return {depth:(state.y+6000)*scale,velocity:state.velocity};
   }
   const terminal=physics.gravity/physics.drag, decay=Math.exp(-physics.drag*seconds);
@@ -34,7 +34,8 @@ export function integrate(depth:number, velocity:number, seconds:number, physics
 }
 export function impact(depth:number, velocity:number, item:string, specification:number|Physics) {
   if(typeof specification!=='number' && specification.version===3) {
-    return item==='mine'||impulses[item]!==undefined ? contactVelocity(depth/specification.verticalScale!-6000,velocity,item==='mine') : velocity;
+    const nativeY=depth/specification.verticalScale!-6000;
+    return item==='mine'||impulses[item]!==undefined ? contactVelocity(specification.fieldHeight===undefined?nativeY:Math.min(0,nativeY),velocity,item==='mine') : velocity;
   }
   const gravity=typeof specification==='number'?specification:specification.gravity;
   if(item==='mine') return Math.max(18,velocity+10);

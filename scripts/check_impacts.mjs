@@ -20,6 +20,18 @@ try {
     }
   }
   const physics={version:2,gravity:18,drag:.45,horizontalSpeed:200};
+  // The same state and elapsed time must move exactly the same number of
+  // metres in every difficulty, including the same pickup and mine impulse.
+  for(const target of [100,300,600]) {
+    const shared={version:3,gravity:1,drag:0,horizontalSpeed:120,verticalScale:1/60,fieldHeight:target*60};
+    const easy={...shared,fieldHeight:6000};
+    for(const velocity of [-90,-40,0,60,78]) {
+      for(const seconds of [1/60,.2,.5])assert.deepEqual(integrate(50,velocity,seconds,shared),integrate(50,velocity,seconds,easy));
+      for(const item of ['bubble','treasure','chest','pearl','mine'])assert.equal(impact(50,velocity,item,shared),impact(50,velocity,item,easy));
+    }
+    assert.deepEqual(integrate(target-1,60,1,shared),{depth:target,velocity:0});
+    if(target>100)assert.ok(integrate(99,60,.1,shared).depth>100,'deep routes continue past Easy seabed');
+  }
   for(const target of [100,300,600]) {
     const native={version:3,gravity:1,drag:0,horizontalSpeed:120,verticalScale:target/6000};
     const depth=2000*native.verticalScale;

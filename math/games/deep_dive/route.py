@@ -21,15 +21,17 @@ def integrate(depth: float, velocity: float, seconds: float, physics=None) -> tu
     """Native tick physics, or legacy analytic drag for version 2 replay checks."""
     if physics and physics["version"] == 3:
         scale, ticks = physics["verticalScale"], seconds * 60
+        height = physics.get("fieldHeight", 6000)
+        floor = height - 6000
         y, speed = advance_vertical(depth / scale - 6000, velocity, ticks)
         whole = math.floor(ticks + 1e-8)
         fraction = ticks - whole
         if fraction > 1e-8:
             before, before_speed = advance_vertical(depth / scale - 6000, velocity, whole)
             after, _ = advance_vertical(before, before_speed, 1)
-            if before < 0 <= after:
-                return (before * (1 - fraction) + 6000) * scale, before_speed
-        return (6000 * scale, 0) if y >= 0 else ((y + 6000) * scale, speed)
+            if before < floor <= after:
+                return ((before - floor) * (1 - fraction) + height) * scale, before_speed
+        return (height * scale, 0) if y >= floor else ((y + 6000) * scale, speed)
     terminal = GRAVITY / DRAG
     decay = math.exp(-DRAG * seconds)
     return (depth + terminal * seconds + (velocity-terminal)*(1-decay)/DRAG,
@@ -38,7 +40,8 @@ def integrate(depth: float, velocity: float, seconds: float, physics=None) -> tu
 
 def impact(depth: float, velocity: float, item: str, physics=None) -> float:
     if physics and physics["version"] == 3:
-        return contact_velocity(depth / physics["verticalScale"] - 6000, velocity, item == "mine") if item in OPERATIONS else velocity
+        native_y = depth / physics["verticalScale"] - 6000
+        return contact_velocity(min(0, native_y) if "fieldHeight" in physics else native_y, velocity, item == "mine") if item in OPERATIONS else velocity
     if item == "mine":
         return max(18.0, velocity + 10.0)
     if item in IMPULSES:
@@ -192,7 +195,7 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
         value = apply_item(value, item)
     # Additional actual contacts, not decorative scenery. Solve the exact
     # outcome only after this varied middle section has applied its effects.
-    for _ in range(rng.randint(2, 5)):
+    for _ in range(rng.randint(2, 5) * (target_depth // 100)):
         choices = [item for item in OPERATIONS
                    if 300 <= apply_item(value, item) <= 5000 and item != items[-1]]
         item = rng.choice(choices or ["bubble"])
@@ -220,8 +223,12 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
     # on the recovered fixed-tick trajectory, without destination steering.
     # The reference's unrestricted field cannot replace this constrained book
     # generator while retaining every requested payout value and weight.
+    # Every mode uses Easy's metres per tick. Depth extends the field rather
+    # than amplifying gravity, launch speed or pickup impulses.
+    height = target_depth * 60
+    floor = height - 6000
     physics = {"version": 3, "gravity": 1, "drag": 0, "horizontalSpeed": 120,
-               "verticalScale": target_depth / 6000}
+               "verticalScale": 1 / 60, "fieldHeight": height}
     tick, y, velocity, value = 0, -6000, 78, 100
     events = [{"type": "diveStep", "item": "launch", "distance": 0, "time": 0,
                "depth": 0, "velocity": velocity, "multiplier": value,
@@ -230,11 +237,11 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
 
     def floor_ticks(at_y, at_speed):
         low, high = 0, 256
-        while advance_vertical(at_y, at_speed, high)[0] < 0:
+        while advance_vertical(at_y, at_speed, high)[0] < floor:
             high *= 2
         while low + 1 < high:
             middle = (low + high) // 2
-            if advance_vertical(at_y, at_speed, middle)[0] < 0:
+            if advance_vertical(at_y, at_speed, middle)[0] < floor:
                 low = middle
             else:
                 high = middle
@@ -244,10 +251,14 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
         desired = rng.randint(30, 55) if index == 0 else rng.randint(*rng.choice([(6, 14), (18, 32), (42, 72)]))
         if item == "mine":
             desired = rng.randint(6, 24)
+        if target_depth > 100:
+            # Spread contacts through the deeper field, with Easy's motion
+            # between them. Short hazard clusters retain their normal gaps.
+            desired += (target_depth // 100 - 1) * (12 if item == "mine" else 24)
         candidates = []
         for gap in range(4, floor_ticks(y, velocity)):
             at_y, incoming = advance_vertical(y, velocity, gap)
-            outgoing = contact_velocity(at_y, incoming, item == "mine")
+            outgoing = contact_velocity(min(0, at_y), incoming, item == "mine")
             # Reject placements whose resulting rise would leave the ocean.
             # This chooses encounter timing; the force itself is never altered.
             crest = advance_vertical(at_y, outgoing, max(0, -outgoing))[0]
@@ -257,10 +268,10 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
             probe_y, probe_speed, safe = at_y, outgoing, True
             for following in items[index + 1:]:
                 probe_y, probe_speed = advance_vertical(probe_y, probe_speed, 4)
-                if probe_y >= 0:
+                if probe_y >= floor:
                     safe = False
                     break
-                probe_speed = contact_velocity(probe_y, probe_speed, following == "mine")
+                probe_speed = contact_velocity(min(0, probe_y), probe_speed, following == "mine")
             if safe:
                 candidates.append((abs(gap - desired), gap, at_y, outgoing))
         if not candidates:
@@ -269,7 +280,7 @@ def generate_route(target: int, seed: int, target_depth: int = 100, landing_bonu
         tick += gap
         value = apply_item(value, item)
         events.append({"type": "diveStep", "item": item, "distance": tick * 2, "time": tick / 60,
-                       "depth": (y + 6000) / 60, "velocity": velocity, "multiplier": value})
+                       "depth": (y + 6000) / height * 100, "velocity": velocity, "multiplier": value})
     assert value == raw_target
     tick += floor_ticks(y, velocity)
     # Reference braking runs 39 more ticks, consuming 39 world-distance units.

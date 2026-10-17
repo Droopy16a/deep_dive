@@ -8,6 +8,9 @@
   let viewport = $state({width:1200, height:740, subWidth:340});
   const trail = $derived(buildWake(wake, {...viewport, distance, targetDepth, camera}));
   const groundY = $derived((.364 + targetDepth * .012 - camera) * 740);
+  const depthMetres = $derived(Math.max(0, progress * targetDepth / 100));
+  // Light fades with actual depth, consistently across all difficulties.
+  const waterDarkness = $derived(.9 * (1 - Math.exp(-depthMetres / 200)));
   onMount(() => {
     const parent = submarine.parentElement!;
     const measure = () => {
@@ -47,8 +50,12 @@
   <rect width="1200" height="740" fill="url(#moving-floor)"/>
   <path d="M0 622H1200" stroke="#70a7a0" stroke-opacity=".32" stroke-width="2"/>
   </g>
-  <g transform={`translate(${80 - distance * 8.4} ${220-camera*740})`}><path d="M-80 0H120L158 15H-80Z" fill="#2b4c60"/><path d="M-80 -14H102L120 0H-80Z" fill="#78949d"/><path d="M-30 -14V-56H-22V-14M80 -14V-39H88V-14" stroke="#637d89" stroke-width="5"/><path d="M-80 18H105L87 32H-80Z" fill="#132c43"/></g>
-
+  <g transform={`translate(${80 - distance * 8.4} ${220-camera*740})`}>
+    <svg x="-115" y="-57.34" width="249.1" height="92.12" viewBox="27 378 1027 323" preserveAspectRatio="none">
+      <image href={`${import.meta.env.BASE_URL}launch-platform.png`} width="1080" height="1080"/>
+    </svg>
+  </g>
+  <rect width="1200" height="740" fill="#010813" opacity={waterDarkness}/>
 </svg>
 <svg class="water-wake" viewBox={`0 0 ${viewport.width} ${viewport.height}`} preserveAspectRatio="none" aria-hidden="true">
   <defs><linearGradient id="sub-wake-fade" gradientUnits="userSpaceOnUse" x1={trail.points[0]?.x ?? 0} y1={trail.points[0]?.y ?? 0} x2={trail.points.at(-1)?.x ?? 1} y2={trail.points.at(-1)?.y ?? 0}>
