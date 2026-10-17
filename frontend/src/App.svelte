@@ -12,6 +12,7 @@
   import Ocean from './lib/Ocean.svelte';
   import type { WakeSample } from './lib/wake';
   import Pickup from './lib/Pickup.svelte';
+  import HitEffect from './lib/HitEffect.svelte';
   // import GameWordmark from './lib/GameWordmark.svelte';
 
   const launchParams = new URL(window.location.href).searchParams;
@@ -31,6 +32,8 @@
   let flags = $state<JurisdictionFlags | null>(null);
   let routeSteps = $state<DiveStep[]>([]);
   let wake = $state<WakeSample[]>([]);
+  let hitEffects = $state<{id: number; bomb: boolean; distance: number; depth: number}[]>([]);
+  let bombHits = $state(0);
   // Field lifetimes control respawning, not visibility: retain old props until offscreen.
   const offPathItems = $derived((routeSteps[0]?.scenery ?? []).filter(object =>
     ['bubble', 'treasure', 'chest', 'pearl', 'mine'].includes(object.item)));
@@ -44,6 +47,33 @@
   let launching = $state(false);
   let audio: AudioContext | null = null;
   let masterGain: GainNode | null = null;
+  let explosionBuffer: Promise<AudioBuffer | null> | null = null;
+  function loadExplosion() {
+    if (!audio) return Promise.resolve(null);
+    const context = audio;
+    explosionBuffer ??= fetch(`${import.meta.env.BASE_URL}audio/bomb-explosion.mp3`)
+      .then(response => {
+        if (!response.ok) throw new Error('Explosion sound unavailable');
+        return response.arrayBuffer();
+      })
+      .then(data => context.decodeAudioData(data))
+      .catch(() => { explosionBuffer = null; return null; });
+    return explosionBuffer;
+  }
+  async function playExplosion() {
+    if (!sound || disposed) return;
+    try {
+      const buffer = await loadExplosion();
+      if (!buffer || !sound || disposed || !audio || !masterGain) return;
+      await audio.resume();
+      if (!sound || disposed) return;
+      const source = audio.createBufferSource();
+      source.buffer = buffer;
+      source.connect(masterGain);
+      source.onended = () => source.disconnect();
+      source.start();
+    } catch { /* Optional audio must never interrupt the dive. */ }
+  }
   const speeds = [ { label: 'Slow', icon: 'turtle', delay: 1100 }, { label: 'Normal', icon: 'walk', delay: 700 },
     { label: 'Fast', icon: 'fast', delay: 350 }, { label: 'Turbo', icon: 'bolt', delay: 160 } ];
   let camera = $state(0);
@@ -72,6 +102,7 @@
       if (!masterGain) { masterGain = audio.createGain(); masterGain.connect(audio.destination); }
       masterGain.gain.setValueAtTime(1, audio.currentTime);
       void audio.resume();
+      void loadExplosion();
       const oscillator = audio.createOscillator(), gain = audio.createGain();
       oscillator.type = 'sine';
       oscillator.frequency.setValueAtTime(win ? 660 : 260, audio.currentTime);
@@ -125,16 +156,19 @@
           const event = steps[nextEvent++];
           multiplier = event.multiplier / 100;
           encounter = itemLabels[event.item]; encounterKey++;
+          if (['bubble', 'treasure', 'chest', 'pearl', 'mine'].includes(event.item)) {
+            hitEffects = [...hitEffects, {id: encounterKey, bomb: event.item === 'mine', distance: event.distance, depth: event.depth}];
+          }
           status = event.item === 'mine' ? 'Mine hit · value halved' : itemLabels[event.item];
           if (['bubble','treasure','chest','pearl'].includes(event.item)) tone(true);
-          if (event.item === 'mine') tone(false);
+          if (event.item === 'mine') { bombHits++; void playExplosion(); }
         }
         if (elapsed >= duration) {
           const end = steps.at(-1)!;
           progress = end.depth; grounded = end.item === 'ground'; pitch = grounded ? 0 : pitch;
           if (import.meta.env.DEV && timings.length) {
             const sorted = [...timings].sort((a,b) => a-b);
-            console.debug('Trenchbound Relay motion', JSON.stringify({frames: timings.length,
+            console.debug('Abyss Rush motion', JSON.stringify({frames: timings.length,
               durationMs: Math.round(now - started), p95FrameMs: Math.round(sorted[Math.floor(sorted.length * .95)] * 10) / 10,
               contacts: nextEvent, expectedContacts: steps.length}));
           }
@@ -148,6 +182,8 @@
   async function present(current: Round) {
     camera = 0; progress = 0; distance = 0; pitch = 0; grounded = false; multiplier = 1; lost = false; completed = false; lastWin = 0;
     wake = [];
+    hitEffects = [];
+    bombHits = 0;
     const events = readEvents(current.state);
     const target = (events[0] as DiveStep).targetDepth!;
     if (current.mode && current.mode !== modeForDepth(target)) throw new Error('Server mode does not match the route depth');
@@ -210,7 +246,7 @@
     // A finished dive belongs to the old target; show the new ocean from launch.
     completed = false; camera = 0; progress = 0; distance = 0; pitch = 0;
     grounded = false; lost = false; multiplier = 1; lastWin = 0;
-    wake = []; routeSteps = []; encounter = ''; status = 'Ready to dive';
+    wake = []; routeSteps = []; encounter = ''; bombHits = 0; status = 'Ready to dive';
   }
   function changeBet(direction: number) {
     if (replay || busy || autoRemaining || !levels.length) return;
@@ -271,7 +307,7 @@
 <svelte:window onkeydown={spacebar}/>
 
 <main class="game" class:playing={busy} class:launching={launching} class:shaking={shakeIntensity > 0} style={`--play-scale:${playSize};--play-opacity:${playOpacity};--shake-offset:${shakeIntensity * 6}px`}>
-  <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake} onViewport={view => { flightView = view; }}/></div>
+  <div class="game-world"><Ocean targetDepth={displayDepth} {camera} {progress} {distance} {pitch} {grounded} {busy} {lost} {wake} {bombHits} onViewport={view => { flightView = view; }}/></div>
   <header class="topbar">
     <div class="studio"><img class="studio-logo" src={`${import.meta.env.BASE_URL}czn-studios-logo.png`} alt="CZN Studios"/><span>{GAME_TITLE.toUpperCase()}<small>{replay ? 'ROUND REPLAY' : 'DEMO \u00b7 SIMULATED BALANCE'}</small></span></div>
     <!-- <div class="wordmark"><GameWordmark/></div> -->
@@ -285,6 +321,9 @@
   <div class="vessel-label" style={`left:32%;top:${subTop(progress)};translate:0 -40px`}>{money(busy ? Math.round(bet * multiplier) : completed ? lastWin : bet)}</div>
   {#if busy || completed}{#each offPathItems as object (object.id)}{#if object.distance > distance - 110 && object.distance < distance + 110 && distance >= (object.spawnDistance??-Infinity)}<div class="route-token off-path-item" class:mine={object.item === 'mine'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(object.distance - distance) * .7}%);top:${subTop(object.depth)};scale:${object.scale};rotate:${object.rotation}deg`} aria-hidden="true"><span><Pickup item={object.item}/></span></div>{/if}{/each}{/if}
   {#if busy}{#each routeSteps as step (step.index)}{#if !['launch','ground'].includes(step.item) && step.distance > distance + .1 && step.distance < distance + 110}<div class="route-token" class:mine={step.item === 'mine'} class:bubble={step.item === 'bubble'} class:chest={step.item === 'chest'} class:pearl={step.item === 'pearl'} style={`left:calc(32% + var(--sub-width) * ${86 / 420} + ${(step.distance - distance) * .7}%);top:${subTop(step.depth)}`} aria-hidden="true"><span><Pickup item={step.item}/></span></div>{/if}{/each}{/if}
+  {#each hitEffects as hit (hit.id)}
+    <HitEffect bomb={hit.bomb} left={`calc(32% + var(--sub-width) * ${86 / 420} + ${(hit.distance - distance) * .7}%)`} top={subTop(hit.depth)} onDone={() => { hitEffects = hitEffects.filter(effect => effect.id !== hit.id); }}/>
+  {/each}
   {#key encounterKey}{#if encounter}<div class:danger={encounter === '÷2'} class="encounter" style={`left:41%;top:${subTop(progress)}`}>{encounter}</div>{/if}{/key}
   {#if completed && !busy}<div class="result" class:empty={multiplier === 0} role="status"><small>{status}</small><strong>{multiplier > 0 ? money(lastWin) : 'No treasure this time'}</strong><span>{multiplier.toFixed(2)}×</span></div>{/if}
   <div class="world-depth-scale" aria-hidden="true">{#each depthTicks as tick}<span style={`top:${tick.top}%`}>{tick.metres}m ─</span>{/each}</div>
@@ -351,7 +390,7 @@
         <p>Slow, Normal, Fast and Turbo change animation speed, including during playback. Faster options may be unavailable in some regions. The speaker mutes or enables every sound; the same control is in Settings. The menu opens Settings; How to play opens these rules. Play button size and opacity adjust the main control; Reset play button restores both defaults. Close dismisses any panel; Escape also closes it. Reconnect reloads the game and recovers any unfinished live round. There is no fullscreen or feature activation control.</p>
         <h3>General information</h3>
         <p>{demo ? 'Fun play uses a simulated balance only. Reload resets it.' : replay ? 'This is a recording of a server result. It does not change your balance.' : 'Results and balance are supplied by the game server.'}</p>
-        <p>Malfunction voids all wins and plays. A consistent internet connection is required. In the event of a disconnection, reload the game to finish any uncompleted rounds. The expected return is calculated over many plays. The game display does not represent a physical device and is for illustrative purposes only. Wins are settled according to the amount received from the Remote Game Server, rather than events within the web browser. TM and © 2026 Engine. Trenchbound Relay by CZN Studios.</p>
+        <p>Malfunction voids all wins and plays. A consistent internet connection is required. In the event of a disconnection, reload the game to finish any uncompleted rounds. The expected return is calculated over many plays. The game display does not represent a physical device and is for illustrative purposes only. Wins are settled according to the amount received from the Remote Game Server, rather than events within the web browser. TM and © 2026 Engine. Abyss Rush by CZN Studios.</p>
       {/if}
     </div></div>
   {/if}

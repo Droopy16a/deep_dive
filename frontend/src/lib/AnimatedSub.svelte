@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { parseGIF, decompressFrames } from 'gifuct-js';
-  let { damaged = false }: { damaged?: boolean } = $props();
+  let { damaged = false, bombHits = 0 }: { damaged?: boolean; bombHits?: number } = $props();
   let canvas: HTMLCanvasElement;
   let loaded = $state(false);
   const width = 180, height = 126;
@@ -73,11 +73,24 @@
         if (stopped) return;
         if (!sprites.length) throw new Error('Sprite contains no frames');
         const output = canvas.getContext('2d')!;
+        const nose = document.createElement('canvas'); nose.width = width; nose.height = height;
+        const noseContext = nose.getContext('2d')!;
+        // Mask the heat to the sprite's nose, preserving its moving silhouette.
+        const noseTint = noseContext.createLinearGradient(100, 0, 170, 0);
+        noseTint.addColorStop(0, 'rgba(255, 152, 36, 0)');
+        noseTint.addColorStop(.5, 'rgba(255, 132, 24, .4)');
+        noseTint.addColorStop(1, 'rgba(255, 76, 12, .95)');
         const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         let last = -1, damageStart = 0, wasDamaged = false;
         const started = performance.now();
+        let previousTime = started, previousBombHits = 0, heat = 0, previousHeat = 0;
         function render(now: number) {
           if (stopped) return;
+          // Heat cools in real time, including after a dive ends. Close hits stack.
+          heat = Math.max(0, heat - Math.max(0, now - previousTime) / 1000 * .65);
+          if (bombHits < previousBombHits) heat = 0;
+          else if (bombHits > previousBombHits) heat = Math.min(1, heat + (bombHits - previousBombHits) * .34);
+          previousBombHits = bombHits; previousTime = now;
           if (damaged && !wasDamaged) damageStart = now;
           wasDamaged = damaged;
           // The supplied GIF also contains a torpedo/explosion. Use its idle
@@ -85,7 +98,26 @@
           const index = reduced ? 0 : damaged
             ? Math.min(sprites.length - 1, 18 + Math.floor(Math.max(0, now - damageStart) / 100))
             : Math.floor(Math.max(0, now - started) / 100) % Math.min(17, sprites.length);
-          if (index !== last) { output.putImageData(sprites[index], 0, 0); last = index; }
+          if (index !== last || heat > 0 || previousHeat > 0) {
+            output.clearRect(0, 0, width, height);
+            output.putImageData(sprites[index], 0, 0);
+            if (heat > 0) {
+              noseContext.putImageData(sprites[index], 0, 0);
+              noseContext.globalCompositeOperation = 'source-in';
+              noseContext.fillStyle = noseTint;
+              noseContext.fillRect(0, 0, width, height);
+              noseContext.globalCompositeOperation = 'source-over';
+              output.save();
+              output.globalAlpha = heat;
+              output.shadowColor = '#ff861c';
+              output.shadowBlur = 2;
+              output.drawImage(nose, 0, 0);
+              output.shadowBlur = 5 + heat * 7;
+              output.drawImage(nose, 0, 0);
+              output.restore();
+            }
+            last = index; previousHeat = heat;
+          }
           request = requestAnimationFrame(render);
         }
         loaded = true;

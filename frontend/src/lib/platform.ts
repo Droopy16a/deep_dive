@@ -1,6 +1,6 @@
 import type { Currency, Round } from 'stake-engine';
 
-export const GAME_TITLE = 'Trenchbound Relay';
+export const GAME_TITLE = 'Abyss Rush';
 export const MICRO = 1_000_000;
 const currencies = new Set('USD EUR CAD MXN JPY RUB CNY PHP INR IDR KRW BRL DKK PLN VND TRY CLP ARS PEN NGN SAR ILS AED TWD NOK KWD JOD CRC TND SGD MYR OMR QAR BHD XSC XGC XEC'.split(' '));
 

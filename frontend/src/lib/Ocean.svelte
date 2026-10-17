@@ -3,7 +3,7 @@
   import AnimatedSub from './AnimatedSub.svelte';
   import { buildWake, type WakeSample } from './wake';
   import type { FlightView } from './flight';
-  let { targetDepth, camera, progress, distance, pitch, grounded, busy, lost, wake, onViewport }: { targetDepth: number; camera: number; progress: number; distance: number; pitch: number; grounded: boolean; busy: boolean; lost: boolean; wake: WakeSample[]; onViewport: (view:FlightView)=>void } = $props();
+  let { targetDepth, camera, progress, distance, pitch, grounded, busy, lost, wake, bombHits, onViewport }: { targetDepth: number; camera: number; progress: number; distance: number; pitch: number; grounded: boolean; busy: boolean; lost: boolean; wake: WakeSample[]; bombHits: number; onViewport: (view:FlightView)=>void } = $props();
   let submarine: SVGSVGElement;
   let viewport = $state({width:1200, height:740, subWidth:340});
   const trail = $derived(buildWake(wake, {...viewport, distance, targetDepth, camera}));
@@ -73,7 +73,7 @@
   <g class:sub-travelling={busy} class:sub-lost={lost}>
     <g class:sub-bob={!busy && !grounded && !lost} transform={`rotate(${pitch})`}>
       <path d="M75 0L225 -28V40Z" fill="#d4ffee" opacity=".08"/>
-      <foreignObject x="-80" y="-70" width="180" height="126"><AnimatedSub/></foreignObject>
+      <foreignObject x="-80" y="-70" width="180" height="126"><AnimatedSub {bombHits}/></foreignObject>
     </g>
   </g>
 </svg>

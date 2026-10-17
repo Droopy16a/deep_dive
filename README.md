@@ -1,4 +1,4 @@
-# Trenchbound Relay — CZN Studios
+# Abyss Rush — CZN Studios
 
 Svelte 5 / TypeScript / Vite frontend, official pinned Stake Engine client, and Python Math SDK. The selector offers Easy (100 m), Medium (300 m) and Hard (600 m), with an immediate loss at zero and a bonus for reaching the selected seabed. The model is independently designed; it is not BGaming's undisclosed exact math.
 
